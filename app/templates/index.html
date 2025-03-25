@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Trajectories</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!--link rel="stylesheet" href="/static/css/styles.css"-->
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #3498db;
+        }
+
+        body {
+            background: #f8f9fa;
+            min-height: 100vh;
+        }
+
+        .main-card {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .main-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .drop-zone {
+            border: 2px dashed var(--secondary-color);
+            border-radius: 10px;
+            padding: 2rem;
+            text-align: center;
+            cursor: pointer;
+            background: #f8fbff;
+            transition: all 0.3s ease;
+        }
+
+        .drop-zone.dragover {
+            background: #e3f2fd;
+            border-color: var(--primary-color);
+        }
+
+        .progress-bar {
+            height: 20px;
+            border-radius: 10px;
+            background-color: #e9ecef;
+            overflow: hidden;
+            display: none;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--secondary-color), var(--primary-color));
+            transition: width 0.4s ease;
+        }
+
+        .preview-section {
+            border-left: 2px solid #eee;
+            min-height: 80vh;
+        }
+
+        .file-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .btn .spinner-border {
+            vertical-align: middle;
+            margin-left: 8px;
+        }
+        .btn:disabled {
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container py-5">
+        <div class="row">
+            <div class="col-md-8">
+                <div class="main-card p-4 mb-4">
+                    <h2 class="mb-4">Conversor de Arquivos TXT</h2>
+                    
+                    <div class="drop-zone" id="dropZone">
+                        <p>Arraste seu arquivo TXT aqui ou clique para selecionar</p>
+                        <input type="file" id="fileInput" accept=".txt" hidden>
+                    </div>
+
+                    <div class="mt-4">
+                        <form id="conversionForm">
+                            <div class="mb-3">
+                                <label for="cameraInput" class="form-label">Câmera/Background</label>
+                                <input type="text" class="form-control" id="cameraInput" required>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="conversionType" class="form-label">Tipo de Conversão</label>
+                                <select class="form-select" id="conversionType">
+                                    <option value="/upload_txt_to_csv">Conversão Básica</option>
+                                    <option value="/upload_txt_to_csv_datetime">Conversão com Datetime</option>
+                                </select>
+                            </div>
+
+                            <div class="progress-bar mb-3">
+                                <div class="progress-fill" style="width: 0%"></div>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary w-100">
+                                <span class="upload-text">Converter Arquivo</span>
+                                <span class="spinner-border spinner-border-sm" style="display: none"></span>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="main-card p-4">
+                    <h5 class="mb-3">Pré-visualização</h5>
+                    <div id="filePreview" class="mb-4"></div>
+    
+                    <h5 class="mb-3">Últimas Conversões</h5>
+                    <div class="file-list" id="conversionHistory"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-5">
+        <div class="col-md-12">
+            <div class="main-card p-4 mb-4">
+                <h3 class="mb-4">Plotagem de Trajetórias</h3>
+                
+                <!-- Controles de Plotagem -->
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label">Tipo de Plotagem</label>
+                        <select class="form-select" id="plotType" onchange="updatePlotControls()">
+                            <option value="/plot_trajectories">Plot Básico</option>
+                            <option value="/plot_trajectories_categorized">Plot Categorizado</option>
+                            <option value="/plot_trajectories_one_category">Plot por Categoria Única</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label">Câmera/Background</label>
+                        <input type="text" class="form-control" id="plotCamera" 
+                            placeholder="Nome da câmera">
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label">Data</label>
+                        <input type="date" class="form-control" id="plotDate" 
+                            required>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label">Horário Inicial</label>
+                        <input type="time" class="form-control" id="plotStartTime" 
+                            step="3600" required>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label">Horário Final</label>
+                        <input type="time" class="form-control" id="plotEndTime" 
+                            step="3600" required>
+                    </div>
+
+                    <!-- Campo dinâmico para categoria -->
+                    <div class="col-md-3" id="categoryField" style="display: none;">
+                        <label class="form-label">Categoria</label>
+                        <input type="number" class="form-control" id="plotCategory" 
+                            step="0.1" placeholder="Ex: 1.2">
+                    </div>
+                </div>
+
+                <!-- Controles Avançados -->
+                <div class="row g-3 mt-2" id="advancedControls">
+                    <div class="col-md-2">
+                        <label class="form-label">Largura (cm)</label>
+                        <input type="number" class="form-control" 
+                            id="plotXsize" value="10" step="0.5">
+                    </div>
+
+                    <div class="col-md-2">
+                        <label class="form-label">Altura (cm)</label>
+                        <input type="number" class="form-control" 
+                            id="plotYsize" value="10" step="0.5">
+                    </div>
+
+                    <div class="col-md-2">
+                        <label class="form-label">Limite X Inicial</label>
+                        <input type="number" class="form-control" 
+                            id="plotXlim1" value="0">
+                    </div>
+
+                    <div class="col-md-2">
+                        <label class="form-label">Limite X Final</label>
+                        <input type="number" class="form-control" 
+                            id="plotXlim2" value="100">
+                    </div>
+
+                    <div class="col-md-2">
+                        <label class="form-label">Limite Y Inicial</label>
+                        <input type="number" class="form-control" 
+                            id="plotYlim1" value="0">
+                    </div>
+
+                    <div class="col-md-2">
+                        <label class="form-label">Limite Y Final</label>
+                        <input type="number" class="form-control" 
+                            id="plotYlim2" value="100">
+                    </div>
+                </div>
+
+                <button type="button" class="btn btn-primary mt-4 w-100" onclick="generatePlot()">
+                    <span class="upload-text">Gerar Plotagem</span>
+                    <span class="spinner-border spinner-border-sm" style="display: none"></span>
+                </button>
+
+                <!-- Área de Visualização -->
+                <div class="mt-4 text-center" id="plotPreview">
+                    <div class="alert alert-info alert-dismissible fade show">
+                        Selecione os parâmetros e clique em "Gerar Plotagem"
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                    <img id="plotImage" class="img-fluid" style="display: none;">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Plotagem de Trajetórias com Background -->
+    <div class="main-card p-4 mt-5">
+        <h3 class="mb-4">Plotagem de Trajetórias com Background</h3>
+
+        <!-- Upload de Imagem -->
+        <div class="col-md-3">
+            <label class="form-label">Imagem de Fundo (JPG/PNG)</label>
+            <input type="file" class="form-control" id="bgImageUpload" accept="image/*">
+            <small class="form-text text-muted">Tamanho máximo: 5MB</small>
+        </div>
+
+        <!-- Seção de Controles -->
+        <div class="row g-3" id="plotBackgroundControls">
+            <!-- Seletor de Tipo -->
+            <div class="col-md-4">
+                <label class="form-label">Tipo de Plotagem</label>
+                <select class="form-select" id="plotBackgroundType" onchange="updateBgPlotControls()">
+                    <option value="/plot_with_background">Geral com Background</option>
+                    <option value="/plot_one_category">Categoria Específica</option>
+                    <option value="/plot_with_limits">Com Limites e Referência</option>
+                    <option value="/plot_start_finish">Partida/Chegada</option>
+                </select>
+            </div>
+
+            <!-- Campos Fixos -->
+            <div class="col-md-4">
+                <label class="form-label">Câmera</label>
+                <input type="text" class="form-control" id="bgCamera" required>
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label">Data</label>
+                <input type="date" class="form-control" id="bgSelectedDate" required>
+            </div>
+
+            <!-- Campos Dinâmicos -->
+            <div class="row mb-3">
+                <div class="col-md-4" id="bgCategoryField" style="display:none;">
+                    <label class="form-label">Categoria</label>
+                    <input type="number" step="0.1" class="form-control" id="bgCategory">
+                </div>
+
+                <div class="col-md-4" id="bgReferenceLineField" style="display:none;">
+                    <label class="form-label">Linha de Referência (WKT)</label>
+                    <input type="text" class="form-control" 
+                        id="bgReferenceLine"
+                        name="reference_line"
+                        placeholder="Ex: LINESTRING(10 20, 30 40)">
+                </div>
+
+                <div class="col-md-4" id="departureField" style="display: none;">
+                    <label class="form-label">Linha de Partida (WKT)</label>
+                    <input type="text" class="form-control" 
+                        id="bgDepartureLine"
+                        name="departure_line"
+                        placeholder="Ex: LINESTRING(0 0, 50 100)">
+                </div>
+
+                <div class="col-md-4" id="bgStartFinishField" style="display:none;">
+                    <label class="form-label">Linha de Chegada (WKT)</label>
+                    <input type="text" class="form-control" 
+                        id="bgFinishLine"
+                        name="finish_line"
+                        placeholder="Ex: LINESTRING(50 60, 70 80)">
+                </div>
+            </div>
+
+        <!-- Parâmetros Complementares -->
+        <div class="row g-3 mt-2">
+            <!-- Tempo -->
+            <div class="col-md-3">
+                <label class="form-label">Horário Inicial</label>
+                <input type="time" class="form-control" id="bgStartTime" required>
+            </div>
+
+            <div class="col-md-3">
+                <label class="form-label">Horário Final</label>
+                <input type="time" class="form-control" id="bgEndTime" required>
+            </div>
+
+            <!-- Dimensões -->
+            <div class="col-md-3">
+                <label class="form-label">Largura (cm)</label>
+                <input type="number" step="0.1" class="form-control" id="bgXsize" value="10">
+            </div>
+
+            <div class="col-md-3">
+                <label class="form-label">Altura (cm)</label>
+                <input type="number" step="0.1" class="form-control" id="bgYsize" value="10">
+            </div>
+
+            <!-- Limites -->
+            <div class="col-md-3">
+                <label class="form-label">Limite X Inicial</label>
+                <input type="number" step="0.1" class="form-control" id="bgXlim1" value="0">
+            </div>
+
+            <div class="col-md-3">
+                <label class="form-label">Limite X Final</label>
+                <input type="number" step="0.1" class="form-control" id="bgXlim2" value="100">
+            </div>
+
+            <div class="col-md-3">
+                <label class="form-label">Limite Y Inicial</label>
+                <input type="number" step="0.1" class="form-control" id="bgYlim1" value="0">
+            </div>
+
+            <div class="col-md-3">
+                <label class="form-label">Limite Y Final</label>
+                <input type="number" step="0.1" class="form-control" id="bgYlim2" value="100">
+            </div>
+
+            <!-- Processamento -->
+            <div class="col-md-3">
+                <label class="form-label">Min X (Imagem)</label>
+                <input type="number" class="form-control" id="bgMinX" value="0">
+            </div>
+
+            <div class="col-md-3">
+                <label class="form-label">Max X (Imagem)</label>
+                <input type="number" class="form-control" id="bgMaxX" value="100">
+            </div>
+
+            <div class="col-md-3">
+                <label class="form-label">Min Y (Imagem)</label>
+                <input type="number" class="form-control" id="bgMinY" value="0">
+            </div>
+
+            <div class="col-md-3">
+                <label class="form-label">Max Y (Imagem)</label>
+                <input type="number" class="form-control" id="bgMaxY" value="100">
+            </div>
+        </div>
+
+        <!-- Botão e Preview -->
+        <div class="mt-4">
+            <button class="btn btn-primary w-100" onclick="generateBgPlot()">
+                <span class="upload-text">Gerar plotagem</span>
+                <span class="spinner-border spinner-border-sm" style="display:none;"></span>
+            </button>
+        </div>
+
+        <div class="mt-4 text-center">
+            <div class="alert alert-info alert-dismissible fade show">
+                Selecione os parâmetros e clique em "Gerar Plotagem"
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+            <img id="bgPlotImage" class="img-fluid rounded" style="display:none; max-height:70vh;">
+        </div>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const form = document.getElementById('conversionForm');
+        const progressFill = document.querySelector('.progress-fill');
+        const progressBar = document.querySelector('.progress-bar');
+        const submitButton = form.querySelector('button');
+
+        // Handlers para Drag and Drop
+        dropZone.addEventListener('click', () => fileInput.click());
+        
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+
+        // Handler para seleção de arquivo
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        // Manipulação do arquivo selecionado
+        function handleFile(file) {
+            if (file.type !== 'text/plain') {
+                alert('Por favor, selecione um arquivo TXT válido.');
+                return;
+            }
+
+            // Atualiza interface
+            document.getElementById('filePreview').innerHTML = `
+                <div class="alert alert-info">
+                    Arquivo selecionado: <strong>${file.name}</strong><br>
+                    Tamanho: ${(file.size / 1024).toFixed(2)} KB
+                </div>
+            `;
+
+            // Adiciona ao histórico
+            const historyItem = document.createElement('div');
+            historyItem.className = 'alert alert-light mb-2';
+            historyItem.textContent = `✉️ ${file.name} - ${new Date().toLocaleTimeString()}`;
+            document.getElementById('conversionHistory').prepend(historyItem);
+        }
+
+        // Envio do formulário
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const file = fileInput.files[0];
+            const camera = document.getElementById('cameraInput').value;
+            const endpoint = document.getElementById('conversionType').value;
+
+            if (!file || !camera) {
+                alert('Por favor, selecione um arquivo e insira o nome da câmera.');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('camera', camera);
+
+            try {
+                // Mostra loading
+                submitButton.disabled = true;
+                submitButton.querySelector('.upload-text').style.display = 'none';
+                submitButton.querySelector('.spinner-border').style.display = 'inline-block';
+                progressBar.style.display = 'block';
+
+                // Envia arquivo
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(await response.text());
+                }
+
+                // Download automático do JSON
+                const blob = await response.blob();
+                const downloadUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                a.download = file.name.replace('.txt', '_converted.json');
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(downloadUrl);
+
+                // Atualiza interface
+                document.getElementById('filePreview').innerHTML += `
+                    <div class="alert alert-success mt-3">
+                        Conversão concluída com sucesso!
+                    </div>
+                `;
+
+            } catch (error) {
+                console.error('Erro na conversão:', error);
+                document.getElementById('filePreview').innerHTML += `
+                    <div class="alert alert-danger mt-3">
+                        Erro na conversão: ${error.message}
+                    </div>
+                `;
+            } finally {
+                // Reseta interface
+                submitButton.disabled = false;
+                submitButton.querySelector('.upload-text').style.display = 'inline';
+                submitButton.querySelector('.spinner-border').style.display = 'none';
+                progressBar.style.display = 'none';
+                progressFill.style.width = '0%';
+                form.reset();
+            }
+        });
+
+        // Atualiza controles visuais
+        function updatePlotControls() {
+            const plotType = document.getElementById('plotType').value;
+            document.getElementById('categoryField').style.display = 
+                (plotType === '/plot_trajectories_one_category') ? 'block' : 'none';
+        }
+
+        // Converte timepicker para float
+        function timeToFloat(timeString) {
+            const [hours, minutes] = timeString.split(':');
+            return parseFloat(hours) + (parseFloat(minutes)/60);
+        }
+
+        // Gera a plotagem
+        async function generatePlot() {
+            // 1. Capturar elementos do botão
+            const button = document.querySelector('button[onclick="generatePlot()"]');
+            const spinner = button.querySelector('.spinner-border');
+            const buttonText = button.querySelector('.upload-text');
+        
+            try {
+                // 2. Estado de loading
+                button.disabled = true;
+                spinner.style.display = 'inline-block';
+                buttonText.textContent = ' Processando...';
+        
+                // Parâmetros existentes
+                const params = new URLSearchParams({
+                    camera: document.getElementById('plotCamera').value,
+                    selectedDate: document.getElementById('plotDate').value,
+                    startTime: timeToFloat(document.getElementById('plotStartTime').value),
+                    endTime: timeToFloat(document.getElementById('plotEndTime').value),
+                    xsize: document.getElementById('plotXsize').value,
+                    ysize: document.getElementById('plotYsize').value,
+                    xlim1: document.getElementById('plotXlim1').value,
+                    xlim2: document.getElementById('plotXlim2').value,
+                    ylim1: document.getElementById('plotYlim1').value,
+                    ylim2: document.getElementById('plotYlim2').value
+                });
+        
+                // Adiciona categoria se necessário
+                const plotType = document.getElementById('plotType').value;
+                if(plotType === '/plot_trajectories_one_category') {
+                    params.append('category', document.getElementById('plotCategory').value);
+                }
+        
+                const response = await fetch(`${plotType}?${params}`);
+                
+                if(!response.ok) {
+                    throw new Error(await response.text());
+                }
+        
+                // Atualização da imagem
+                const imageBlob = await response.blob();
+                const imageUrl = URL.createObjectURL(imageBlob);
+                const imgElement = document.getElementById('plotImage');
+                imgElement.style.display = 'block';
+                imgElement.src = imageUrl;
+        
+            } catch (error) {
+                alert(`Erro na geração do plot: ${error.message}`);
+            } finally {
+                // 3. Restaura estado original
+                button.disabled = false;
+                spinner.style.display = 'none';
+                buttonText.textContent = 'Gerar Plotagem';
+            }
+        }        
+
+        // Atualiza preview em tempo real (opcional - pode ser ativado)
+        document.querySelectorAll('#plotPreview input, #plotPreview select').forEach(element => {
+            element.addEventListener('change', () => {
+                if(document.getElementById('plotImage').src) {
+                    generatePlot();
+                }
+            });
+        });
+
+        // Controles Dinâmicos
+        function updateBgPlotControls() {
+            const plotType = document.getElementById('plotBackgroundType').value;
+            const dynamicElements = {
+                '/plot_one_category': ['bgCategoryField'],
+                '/plot_with_limits': ['bgCategoryField', 'bgReferenceLineField'],
+                '/plot_start_finish': ['bgCategoryField', 'bgStartFinishField', 'departureField']
+            };
+        
+            // Esconde todos os campos
+            Object.values(dynamicElements).flat().forEach(id => {
+                const el = document.getElementById(id);
+                if(el) {
+                    el.style.display = 'none';
+                    el.querySelector('input').required = false;
+                }
+            });
+        
+            // Exibe campos do tipo selecionado
+            if(dynamicElements[plotType]) {
+                dynamicElements[plotType].forEach(id => {
+                    const el = document.getElementById(id);
+                    if(el) {
+                        el.style.display = 'block';
+                        // Aplica required apenas para campos específicos
+                        el.querySelector('input').required = id === 'bgCategoryField' ? false : true;
+                    }
+                });
+            }
+        }
+
+        function convertTimeToFloat(timeStr) {
+            if (!timeStr) throw new Error("Horário vazio!");
+            const [hours, minutes] = timeStr.split(':').map(Number);
+            if (isNaN(hours) || hours < 0 || hours >= 24 || isNaN(minutes) || minutes < 0 || minutes >= 60) {
+                throw new Error(`Horário inválido: ${timeStr}`);
+            }
+            return hours + (minutes / 60);
+        }
+        
+        function formatFieldName(id) {
+            return id.replace('bg', '')
+                     .replace(/([a-z])([A-Z])/g, '$1_$2')
+                     .toLowerCase();
+        }
+
+        function generateBgPlot() {
+            const button = document.querySelector('button[onclick="generateBgPlot()"]');
+            const spinner = button.querySelector('.spinner-border');
+            const buttonText = button.querySelector('.upload-text');
+            const imgElement = document.getElementById('bgPlotImage');
+        
+            button.disabled = true;
+            spinner.style.display = 'inline-block';
+            buttonText.textContent = 'Processando...';
+            imgElement.style.display = 'none';
+        
+            try {
+                const formData = new FormData();
+                const plotType = document.getElementById('plotBackgroundType').value;
+        
+                // Campos principais
+                const mainFields = [
+                    'bgCamera', 'bgSelectedDate',
+                    'bgStartTime', 'bgEndTime',
+                    'bgXsize', 'bgYsize',
+                    'bgXlim1', 'bgXlim2', 'bgYlim1', 'bgYlim2',
+                    'bgMinX', 'bgMaxX', 'bgMinY', 'bgMaxY'
+
+                ];
+        
+                mainFields.forEach(id => {
+                    const element = document.getElementById(id);
+                    if (!element) return;
+                    
+                    const fieldName = formatFieldName(id);
+                    let value = element.value;
+                
+                    // Conversão de tipos específicos
+                    if (id.endsWith('Time')) {
+                        value = convertTimeToFloat(value);
+                    }
+                    else if (id.match(/(Min|Max|lim|size)/i)) { // Captura campos numéricos
+                        value = parseFloat(value);
+                        if (isNaN(value)) {
+                            throw new Error(`Valor inválido para ${fieldName}`);
+                        }
+                    }
+                
+                    formData.append(fieldName, value);
+                });
+        
+                // Campos dinâmicos condicionais
+                const conditionalFields = {
+                    '/plot_one_category': ['bgCategory'],
+                    '/plot_with_limits': ['bgCategory', 'bgReferenceLine'],
+                    '/plot_start_finish': ['bgCategory','bgDepartureLine', 'bgFinishLine']
+                };
+        
+                (conditionalFields[plotType] || []).forEach(id => {
+                    const element = document.getElementById(id);
+                    if (!element) {
+                        console.error(`Elemento não encontrado: ${id}`);
+                        return;
+                    }
+                    else if (element && element.value) {
+                        formData.append(formatFieldName(id), element.value);
+                    }
+                });
+        
+                // Validações específicas
+                switch(plotType) {
+                    case '/plot_one_category':
+                        if (!formData.get('category')) {
+                            throw new Error('Selecione uma categoria!');
+                        }
+                        break;
+        
+                    case '/plot_with_limits':
+                        if (!formData.get('reference_line')) {
+                            throw new Error('Linha de referência obrigatória!');
+                        }
+                        break;
+        
+                    case '/plot_start_finish':
+                        if (!formData.get('departure_line') || !formData.get('finish_line')) {
+                            throw new Error('Linhas de partida/chegada obrigatórias!');
+                        }
+                        break;
+                }
+
+                // Validação de limites numéricos
+                const boundsFields = ['min_x', 'max_x', 'min_y', 'max_y'];
+                boundsFields.forEach(field => {
+                    const value = formData.get(field);
+                    if (value && (isNaN(value) || value < 0)) {
+                        throw new Error(`Valor inválido para ${field.replace('_', ' ').toUpperCase()}`);
+                    }
+                });
+        
+                // Processamento de arquivo de imagem
+                const imageFile = document.getElementById('bgImageUpload').files[0];
+                if (imageFile) {
+                    formData.append('background_image', imageFile);
+                }
+        
+                // Envio da requisição
+                fetch(plotType, {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => {
+                    if (!response.ok) throw response;
+                    return response.json();  // Assume que o back-end retorna JSON
+                })
+                .then(data => {
+                    if (data.image) {
+                        console.log('Parâmetros enviados:', Array.from(formData.entries()));
+                        imgElement.src = `data:image/png;base64,${data.image}`;
+                        imgElement.style.display = 'block';
+                    } else {
+                        throw new Error('Resposta inválida do servidor');
+                    }
+                })
+                .catch(async (error) => {
+                    if (error instanceof Response) {
+                        const err = await error.json();
+                        alert(`Erro ${error.status}: ${err.error}`);
+                    } else {
+                        alert(error.message);
+                    }
+                })
+                .finally(() => {
+                    spinner.style.display = 'none';
+                    buttonText.textContent = 'Gerar Plot com Background';
+                    button.disabled = false;
+                });
+        
+            } catch (error) {
+                alert(error.message);
+                spinner.style.display = 'none';
+                buttonText.textContent = 'Gerar Plot com Background';
+                button.disabled = false;
+            }
+        }
+        
+        
+
+
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
