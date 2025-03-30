@@ -1,0 +1,67 @@
+:root {
+    --primary-color: #2c3e50;
+    --secondary-color: #3498db;
+}
+
+body {
+    background: #f8f9fa;
+    min-height: 100vh;
+}
+
+.main-card {
+    background: white;
+    border-radius: 15px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: transform 0.3s ease;
+}
+
+.main-card:hover {
+    transform: translateY(-5px);
+}
+
+.drop-zone {
+    border: 2px dashed var(--secondary-color);
+    border-radius: 10px;
+    padding: 2rem;
+    text-align: center;
+    cursor: pointer;
+    background: #f8fbff;
+    transition: all 0.3s ease;
+}
+
+.drop-zone.dragover {
+    background: #e3f2fd;
+    border-color: var(--primary-color);
+}
+
+.progress-bar {
+    height: 20px;
+    border-radius: 10px;
+    background-color: #e9ecef;
+    overflow: hidden;
+    display: none;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--secondary-color), var(--primary-color));
+    transition: width 0.4s ease;
+}
+
+.preview-section {
+    border-left: 2px solid #eee;
+    min-height: 80vh;
+}
+
+.file-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.btn .spinner-border {
+    vertical-align: middle;
+    margin-left: 8px;
+}
+.btn:disabled {
+    opacity: 0.8;
+}
