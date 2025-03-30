@@ -249,10 +249,11 @@
             <div class="col-md-4">
                 <label class="form-label">Tipo de Plotagem</label>
                 <select class="form-select" id="plotBackgroundType" onchange="updateBgPlotControls()">
-                    <option value="/plot_with_background">Geral com Background</option>
-                    <option value="/plot_one_category">Categoria Específica</option>
-                    <option value="/plot_with_limits">Com Limites e Referência</option>
-                    <option value="/plot_start_finish">Partida/Chegada</option>
+                    <option value="/plot_with_background">Plot Básico</option>
+                    <option value="/plot_one_category">Plot de Categoria Específica</option>
+                    <option value="/plot_with_limits">Plot com Limites e Referência</option>
+                    <option value="/plot_start_finish">Plot com Partida/Chegada</option>
+                    <option value="/plot_with_stopped">Plot para Identificar Objetos Parados</option>
                 </select>
             </div>
 
@@ -282,7 +283,7 @@
                         placeholder="Ex: LINESTRING(10 20, 30 40)">
                 </div>
 
-                <div class="col-md-4" id="departureField" style="display: none;">
+                <div class="col-md-4" id="bgDepartureField" style="display: none;">
                     <label class="form-label">Linha de Partida (WKT)</label>
                     <input type="text" class="form-control" 
                         id="bgDepartureLine"
@@ -594,7 +595,8 @@
             const dynamicElements = {
                 '/plot_one_category': ['bgCategoryField'],
                 '/plot_with_limits': ['bgCategoryField', 'bgReferenceLineField'],
-                '/plot_start_finish': ['bgCategoryField', 'bgStartFinishField', 'departureField']
+                '/plot_start_finish': ['bgCategoryField', 'bgStartFinishField', 'bgDepartureField'],
+                '/plot_with_stopped': ['bgCategoryField']
             };
         
             // Esconde todos os campos
@@ -684,7 +686,8 @@
                 const conditionalFields = {
                     '/plot_one_category': ['bgCategory'],
                     '/plot_with_limits': ['bgCategory', 'bgReferenceLine'],
-                    '/plot_start_finish': ['bgCategory','bgDepartureLine', 'bgFinishLine']
+                    '/plot_start_finish': ['bgCategory','bgDepartureLine', 'bgFinishLine'],
+                    '/plot_with_stopped': ['bgCategory']
                 };
         
                 (conditionalFields[plotType] || []).forEach(id => {
@@ -710,11 +713,23 @@
                         if (!formData.get('reference_line')) {
                             throw new Error('Linha de referência obrigatória!');
                         }
+                        else if (!formData.get('category')) {
+                            throw new Error('Selecione uma categoria!');
+                        }
                         break;
         
                     case '/plot_start_finish':
                         if (!formData.get('departure_line') || !formData.get('finish_line')) {
                             throw new Error('Linhas de partida/chegada obrigatórias!');
+                        }
+                        else if (!formData.get('category')) {
+                            throw new Error('Selecione uma categoria!');
+                        }
+                        break;
+                        
+                    case '/plot_with_stopped':
+                        if (!formData.get('category')) {
+                            throw new Error('Selecione uma categoria!');
                         }
                         break;
                 }
@@ -773,9 +788,6 @@
                 button.disabled = false;
             }
         }
-        
-        
-
 
     </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
