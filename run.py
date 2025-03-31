@@ -16,10 +16,10 @@ from shapely.errors import ShapelyError
 from functools import wraps
 from flask.json.provider import DefaultJSONProvider
 from app.utils import JSONEncoder, create_trajectory_collection_mongodb
-from smart_traj.smart_trajectories.convert import txt_to_csv, txt_to_csv_datetime
-from smart_traj.smart_trajectories.processing import generate_trajectory_collection
-from smart_traj.smart_trajectories.plot import plot_trajectories, plot_trajectories_categorized, plot_trajectories_one_category, plot_trajectories_with_background
-from smart_traj.smart_trajectories.plot import plot_trajectories_one_category_background, plot_trajectories_with_limits, plot_trajectories_with_start_finish, plot_trajectories_with_stopped
+from smart_traject.smart_trajectories.convert import txt_to_csv, txt_to_csv_datetime
+from smart_traject.smart_trajectories.processing import generate_trajectory_collection
+from smart_traject.smart_trajectories.plot import plot_trajectories, plot_trajectories_categorized, plot_trajectories_one_category, plot_trajectories_with_background
+from smart_traject.smart_trajectories.plot import plot_trajectories_one_category_background, plot_trajectories_with_limits, plot_trajectories_with_start_finish, plot_trajectories_with_stopped
 from config import INPUT_DATA_DIR, OUTPUT_DATA_DIR, MONGODB_URI, DB_NAME, COLLECTION_NAME, OUTPUT_DATA_DIR2
 
 

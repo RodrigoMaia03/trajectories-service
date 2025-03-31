@@ -1,0 +1,3 @@
+[submodule "smart_traject"]
+	path = smart_traject
+	url = https://github.com/RodrigoMaia03/smart_trajectories.git
