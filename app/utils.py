@@ -6,7 +6,6 @@ import movingpandas as mpd
 from pymongo import MongoClient
 from shapely.geometry import Point
 from config import MONGODB_URI, DB_NAME, COLLECTION_NAME
-from smart_traject.smart_trajectories.processing import generate_trajectory_collection
 
 client = MongoClient(MONGODB_URI)
 db = client[DB_NAME]
