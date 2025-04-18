@@ -5,11 +5,11 @@ import geopandas as gpd
 import movingpandas as mpd
 from pymongo import MongoClient
 from shapely.geometry import Point
-from config import MONGODB_URI, DB_NAME, COLLECTION_NAME
+from config import MONGODB_URI, DB_NAME, COLLECTION_TRAJ, COLLECTION_CAM
 
 client = MongoClient(MONGODB_URI)
 db = client[DB_NAME]
-collection = db[COLLECTION_NAME]
+collection_traj = db[COLLECTION_TRAJ]
 
 class JSONEncoder(json.JSONEncoder):
     def default(self, o):
@@ -21,7 +21,7 @@ class JSONEncoder(json.JSONEncoder):
 def fetch_trajectory_data_from_mongodb(query={}):
     # Busca dados do MongoDB e estrutura no formato equivalente ao CSV.
     data = []
-    for doc in collection.find(query):
+    for doc in collection_traj.find(query):
         identifier = doc['identifier']
         category = doc['category']
         
@@ -59,3 +59,8 @@ def create_trajectory_collection_mongodb(query={}):
     
     # Agrupa por identificador para criar trajetórias
     return mpd.TrajectoryCollection(gdf, 'identifier')
+
+
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg'}

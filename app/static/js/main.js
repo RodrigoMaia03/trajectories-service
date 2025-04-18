@@ -1,207 +1,3 @@
-const dropZone = document.getElementById('dropZone');
-const fileInput = document.getElementById('fileInput');
-const form = document.getElementById('conversionForm');
-const progressFill = document.querySelector('.progress-fill');
-const progressBar = document.querySelector('.progress-bar');
-const submitButton = form.querySelector('button');
-
-// Handlers para Drag and Drop
-dropZone.addEventListener('click', () => fileInput.click());
-
-dropZone.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    dropZone.classList.add('dragover');
-});
-
-dropZone.addEventListener('dragleave', () => {
-    dropZone.classList.remove('dragover');
-});
-
-dropZone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    dropZone.classList.remove('dragover');
-    const files = e.dataTransfer.files;
-    if (files.length > 0) {
-        handleFile(files[0]);
-    }
-});
-
-// Handler para seleção de arquivo
-fileInput.addEventListener('change', (e) => {
-    if (e.target.files.length > 0) {
-        handleFile(e.target.files[0]);
-    }
-});
-
-// Manipulação do arquivo selecionado
-function handleFile(file) {
-    if (file.type !== 'text/plain') {
-        alert('Por favor, selecione um arquivo TXT válido.');
-        return;
-    }
-
-    // Atualiza interface
-    document.getElementById('filePreview').innerHTML = `
-        <div class="alert alert-info">
-            Arquivo selecionado: <strong>${file.name}</strong><br>
-            Tamanho: ${(file.size / 1024).toFixed(2)} KB
-        </div>
-    `;
-
-    // Adiciona ao histórico
-    const historyItem = document.createElement('div');
-    historyItem.className = 'alert alert-light mb-2';
-    historyItem.textContent = `✉️ ${file.name} - ${new Date().toLocaleTimeString()}`;
-    document.getElementById('conversionHistory').prepend(historyItem);
-}
-
-// Envio do formulário
-form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    
-    const file = fileInput.files[0];
-    const camera = document.getElementById('cameraInput').value;
-    const endpoint = document.getElementById('conversionType').value;
-
-    if (!file || !camera) {
-        alert('Por favor, selecione um arquivo e insira o nome da câmera.');
-        return;
-    }
-
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('camera', camera);
-
-    try {
-        // Mostra loading
-        submitButton.disabled = true;
-        submitButton.querySelector('.upload-text').style.display = 'none';
-        submitButton.querySelector('.spinner-border').style.display = 'inline-block';
-        progressBar.style.display = 'block';
-
-        // Envia arquivo
-        const response = await fetch(endpoint, {
-            method: 'POST',
-            body: formData
-        });
-
-        if (!response.ok) {
-            throw new Error(await response.text());
-        }
-
-        // Download automático do JSON
-        const blob = await response.blob();
-        const downloadUrl = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = downloadUrl;
-        a.download = file.name.replace('.txt', '_converted.json');
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(downloadUrl);
-
-        // Atualiza interface
-        document.getElementById('filePreview').innerHTML += `
-            <div class="alert alert-success mt-3">
-                Conversão concluída com sucesso!
-            </div>
-        `;
-
-    } catch (error) {
-        console.error('Erro na conversão:', error);
-        document.getElementById('filePreview').innerHTML += `
-            <div class="alert alert-danger mt-3">
-                Erro na conversão: ${error.message}
-            </div>
-        `;
-    } finally {
-        // Reseta interface
-        submitButton.disabled = false;
-        submitButton.querySelector('.upload-text').style.display = 'inline';
-        submitButton.querySelector('.spinner-border').style.display = 'none';
-        progressBar.style.display = 'none';
-        progressFill.style.width = '0%';
-        form.reset();
-    }
-});
-
-// Atualiza controles visuais
-function updatePlotControls() {
-    const plotType = document.getElementById('plotType').value;
-    document.getElementById('categoryField').style.display = 
-        (plotType === '/plot_trajectories_one_category') ? 'block' : 'none';
-}
-
-// Converte timepicker para float
-function timeToFloat(timeString) {
-    const [hours, minutes] = timeString.split(':');
-    return parseFloat(hours) + (parseFloat(minutes)/60);
-}
-
-// Gera a plotagem
-async function generatePlot() {
-    // 1. Capturar elementos do botão
-    const button = document.querySelector('button[onclick="generatePlot()"]');
-    const spinner = button.querySelector('.spinner-border');
-    const buttonText = button.querySelector('.upload-text');
-
-    try {
-        // 2. Estado de loading
-        button.disabled = true;
-        spinner.style.display = 'inline-block';
-        buttonText.textContent = ' Processando...';
-
-        // Parâmetros existentes
-        const params = new URLSearchParams({
-            camera: document.getElementById('plotCamera').value,
-            selectedDate: document.getElementById('plotDate').value,
-            startTime: timeToFloat(document.getElementById('plotStartTime').value),
-            endTime: timeToFloat(document.getElementById('plotEndTime').value),
-            xsize: document.getElementById('plotXsize').value,
-            ysize: document.getElementById('plotYsize').value,
-            xlim1: document.getElementById('plotXlim1').value,
-            xlim2: document.getElementById('plotXlim2').value,
-            ylim1: document.getElementById('plotYlim1').value,
-            ylim2: document.getElementById('plotYlim2').value
-        });
-
-        // Adiciona categoria se necessário
-        const plotType = document.getElementById('plotType').value;
-        if(plotType === '/plot_trajectories_one_category') {
-            params.append('category', document.getElementById('plotCategory').value);
-        }
-
-        const response = await fetch(`${plotType}?${params}`);
-        
-        if(!response.ok) {
-            throw new Error(await response.text());
-        }
-
-        // Atualização da imagem
-        const imageBlob = await response.blob();
-        const imageUrl = URL.createObjectURL(imageBlob);
-        const imgElement = document.getElementById('plotImage');
-        imgElement.style.display = 'block';
-        imgElement.src = imageUrl;
-
-    } catch (error) {
-        alert(`Erro na geração do plot: ${error.message}`);
-    } finally {
-        // 3. Restaura estado original
-        button.disabled = false;
-        spinner.style.display = 'none';
-        buttonText.textContent = 'Gerar Plotagem';
-    }
-}        
-
-// Atualiza preview em tempo real (opcional - pode ser ativado)
-document.querySelectorAll('#plotPreview input, #plotPreview select').forEach(element => {
-    element.addEventListener('change', () => {
-        if(document.getElementById('plotImage').src) {
-            generatePlot();
-        }
-    });
-});
-
 // Controles Dinâmicos
 function updateBgPlotControls() {
     const plotType = document.getElementById('plotBackgroundType').value;
@@ -209,7 +5,9 @@ function updateBgPlotControls() {
         '/plot_one_category': ['bgCategoryField'],
         '/plot_with_limits': ['bgCategoryField', 'bgReferenceLineField'],
         '/plot_start_finish': ['bgCategoryField', 'bgStartFinishField', 'bgDepartureField'],
-        '/plot_with_stopped': ['bgCategoryField']
+        '/plot_with_stopped': ['bgCategoryField', 'bgStopThresholdField', 'bgMinDurationField', 'bgNoiseToleranceField'],
+        '/plot_with_stop_rec': ['bgCategoryField', 'bgStopThresholdField', 'bgMinDurationField', 'bgNoiseToleranceField',
+                'bgRectMinXField', 'bgRectMaxXField', 'bgRectMinYField', 'bgRectMaxYField']
     };
 
     // Esconde todos os campos
@@ -269,9 +67,7 @@ function generateBgPlot() {
             'bgCamera', 'bgSelectedDate',
             'bgStartTime', 'bgEndTime',
             'bgXsize', 'bgYsize',
-            'bgXlim1', 'bgXlim2', 'bgYlim1', 'bgYlim2',
-            'bgMinX', 'bgMaxX', 'bgMinY', 'bgMaxY'
-
+            'bgXlim1', 'bgXlim2', 'bgYlim1', 'bgYlim2'
         ];
 
         mainFields.forEach(id => {
@@ -285,11 +81,11 @@ function generateBgPlot() {
             if (id.endsWith('Time')) {
                 value = convertTimeToFloat(value);
             }
-            else if (id.match(/(Min|Max|lim|size)/i)) { // Captura campos numéricos
+            else if (id.match(/(lim|size)/i)) {
                 value = parseFloat(value);
                 if (isNaN(value)) {
                     throw new Error(`Valor inválido para ${fieldName}`);
-                }
+                } 
             }
         
             formData.append(fieldName, value);
@@ -300,7 +96,9 @@ function generateBgPlot() {
             '/plot_one_category': ['bgCategory'],
             '/plot_with_limits': ['bgCategory', 'bgReferenceLine'],
             '/plot_start_finish': ['bgCategory','bgDepartureLine', 'bgFinishLine'],
-            '/plot_with_stopped': ['bgCategory']
+            '/plot_with_stopped': ['bgCategory', 'bgStopThreshold', 'bgMinDuration', 'bgNoiseTolerance'],
+            '/plot_with_stop_rec': ['bgCategory', 'bgStopThreshold', 'bgMinDuration', 'bgNoiseTolerance',
+                'bgRectMinX', 'bgRectMaxX', 'bgRectMinY', 'bgRectMaxY']
         };
 
         (conditionalFields[plotType] || []).forEach(id => {
@@ -341,25 +139,45 @@ function generateBgPlot() {
                 break;
                 
             case '/plot_with_stopped':
-                if (!formData.get('category')) {
+                if (!formData.get('stop_threshold')) {
+                    throw new Error('Distância Limite obrigatória!');
+                }
+                else if (!formData.get('min_duration')) {
+                    throw new Error('Tempo Limite obrigatório!');
+                }
+                else if (!formData.get('noise_tolerance')) {
+                    throw new Error('Tolerância obrigatória!');
+                }
+                else if (!formData.get('category')) {
+                    throw new Error('Selecione uma categoria!');
+                }
+                break;
+
+            case '/plot_with_stop_rec':
+                if (!formData.get('stop_threshold')) {
+                    throw new Error('Distância Limite obrigatória!');
+                }
+                else if (!formData.get('min_duration')) {
+                    throw new Error('Tempo Limite obrigatório!');
+                }
+                else if (!formData.get('noise_tolerance')) {
+                    throw new Error('Tolerância obrigatória!');
+                }
+                else if (!formData.get('rect_min_x'||'rect_max_x'||'rect_min_y'||'rect_max_y')) {
+                    throw new Error('Parâmetros de Área obrigatórios!');
+                }
+                else if (!formData.get('category')) {
                     throw new Error('Selecione uma categoria!');
                 }
                 break;
         }
 
-        // Validação de limites numéricos
-        const boundsFields = ['min_x', 'max_x', 'min_y', 'max_y'];
-        boundsFields.forEach(field => {
-            const value = formData.get(field);
-            if (value && (isNaN(value) || value < 0)) {
-                throw new Error(`Valor inválido para ${field.replace('_', ' ').toUpperCase()}`);
-            }
-        });
+        // Captura os valores dos inputs de tamanho da imagem
+        const widthCm = parseFloat(document.getElementById('bgXsize').value);
+        const heightCm = parseFloat(document.getElementById('bgYsize').value);
 
-        // Processamento de arquivo de imagem
-        const imageFile = document.getElementById('bgImageUpload').files[0];
-        if (imageFile) {
-            formData.append('background_image', imageFile);
+        if(widthCm < 1 || heightCm > 50){
+            throw new Error('Valor de Altura ou Largura inválido (Mín: 1 e Máx: 50)');
         }
 
         // Envio da requisição
@@ -369,10 +187,14 @@ function generateBgPlot() {
         })
         .then(response => {
             if (!response.ok) throw response;
-            return response.json();  // Assume que o back-end retorna JSON
+            return response.json();
         })
         .then(data => {
             if (data.image) {
+                // Define as dimensões da imagem
+                imgElement.style.width = `${widthCm * 37.8}px`;
+                imgElement.style.height = `${heightCm * 37.8}px`;
+
                 console.log('Parâmetros enviados:', Array.from(formData.entries()));
                 imgElement.src = `data:image/png;base64,${data.image}`;
                 imgElement.style.display = 'block';
@@ -383,21 +205,21 @@ function generateBgPlot() {
         .catch(async (error) => {
             if (error instanceof Response) {
                 const err = await error.json();
-                alert(`Erro ${error.status}: ${err.error}`);
+                alert(`Erro ${error.status}: Erro no processamento dos parâmetros`);
             } else {
                 alert(error.message);
             }
         })
         .finally(() => {
             spinner.style.display = 'none';
-            buttonText.textContent = 'Gerar Plot com Background';
+            buttonText.textContent = 'Gerar Plot';
             button.disabled = false;
         });
 
     } catch (error) {
         alert(error.message);
         spinner.style.display = 'none';
-        buttonText.textContent = 'Gerar Plot com Background';
+        buttonText.textContent = 'Gerar Plot';
         button.disabled = false;
     }
 }

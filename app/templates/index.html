@@ -9,171 +9,34 @@
     </head>
 
 <body>
-    <div class="container py-5">
-        <div class="row">
-            <div class="col-md-8">
-                <div class="main-card p-4 mb-4">
-                    <h2 class="mb-4">Conversor de Arquivos TXT</h2>
-                    
-                    <div class="drop-zone" id="dropZone">
-                        <p>Arraste seu arquivo TXT aqui ou clique para selecionar</p>
-                        <input type="file" id="fileInput" accept=".txt" hidden>
-                    </div>
-
-                    <div class="mt-4">
-                        <form id="conversionForm">
-                            <div class="mb-3">
-                                <label for="cameraInput" class="form-label">Câmera/Background</label>
-                                <input type="text" class="form-control" id="cameraInput" required>
-                            </div>
-
-                            <div class="mb-3">
-                                <label for="conversionType" class="form-label">Tipo de Conversão</label>
-                                <select class="form-select" id="conversionType">
-                                    <option value="/upload_txt_to_csv">Conversão Básica</option>
-                                    <option value="/upload_txt_to_csv_datetime">Conversão com Datetime</option>
-                                </select>
-                            </div>
-
-                            <div class="progress-bar mb-3">
-                                <div class="progress-fill" style="width: 0%"></div>
-                            </div>
-
-                            <button type="submit" class="btn btn-primary w-100">
-                                <span class="upload-text">Converter Arquivo</span>
-                                <span class="spinner-border spinner-border-sm" style="display: none"></span>
-                            </button>
-                        </form>
-                    </div>
-                </div>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('home') }}">Smart Trajectories</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="{{ url_for('home') }}">Início</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('camera') }}">Cadastro de Câmera</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('converter') }}">Conversor de Trajetórias</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('howtouse') }}">Como Usar</a>
+                    </li>
+                </ul>
             </div>
-
-            <div class="col-md-4">
-                <div class="main-card p-4">
-                    <h5 class="mb-3">Pré-visualização</h5>
-                    <div id="filePreview" class="mb-4"></div>
+        </div>
+    </nav>
     
-                    <h5 class="mb-3">Últimas Conversões</h5>
-                    <div class="file-list" id="conversionHistory"></div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="row mt-5">
-        <div class="col-md-12">
-            <div class="main-card p-4 mb-4">
-                <h3 class="mb-4">Plotagem de Trajetórias</h3>
-                
-                <!-- Controles de Plotagem -->
-                <div class="row g-3">
-                    <div class="col-md-3">
-                        <label class="form-label">Tipo de Plotagem</label>
-                        <select class="form-select" id="plotType" onchange="updatePlotControls()">
-                            <option value="/plot_trajectories">Plot Básico</option>
-                            <option value="/plot_trajectories_categorized">Plot Categorizado</option>
-                            <option value="/plot_trajectories_one_category">Plot por Categoria Única</option>
-                        </select>
-                    </div>
-
-                    <div class="col-md-3">
-                        <label class="form-label">Câmera/Background</label>
-                        <input type="text" class="form-control" id="plotCamera" 
-                            placeholder="Nome da câmera">
-                    </div>
-
-                    <div class="col-md-3">
-                        <label class="form-label">Data</label>
-                        <input type="date" class="form-control" id="plotDate" 
-                            required>
-                    </div>
-
-                    <div class="col-md-3">
-                        <label class="form-label">Horário Inicial</label>
-                        <input type="time" class="form-control" id="plotStartTime" 
-                            step="3600" required>
-                    </div>
-
-                    <div class="col-md-3">
-                        <label class="form-label">Horário Final</label>
-                        <input type="time" class="form-control" id="plotEndTime" 
-                            step="3600" required>
-                    </div>
-
-                    <!-- Campo dinâmico para categoria -->
-                    <div class="col-md-3" id="categoryField" style="display: none;">
-                        <label class="form-label">Categoria</label>
-                        <input type="number" class="form-control" id="plotCategory" 
-                            step="0.1" placeholder="Ex: 1.2">
-                    </div>
-                </div>
-
-                <!-- Controles Avançados -->
-                <div class="row g-3 mt-2" id="advancedControls">
-                    <div class="col-md-2">
-                        <label class="form-label">Largura (cm)</label>
-                        <input type="number" class="form-control" 
-                            id="plotXsize" value="10" step="0.5">
-                    </div>
-
-                    <div class="col-md-2">
-                        <label class="form-label">Altura (cm)</label>
-                        <input type="number" class="form-control" 
-                            id="plotYsize" value="10" step="0.5">
-                    </div>
-
-                    <div class="col-md-2">
-                        <label class="form-label">Limite X Inicial</label>
-                        <input type="number" class="form-control" 
-                            id="plotXlim1" value="0">
-                    </div>
-
-                    <div class="col-md-2">
-                        <label class="form-label">Limite X Final</label>
-                        <input type="number" class="form-control" 
-                            id="plotXlim2" value="100">
-                    </div>
-
-                    <div class="col-md-2">
-                        <label class="form-label">Limite Y Inicial</label>
-                        <input type="number" class="form-control" 
-                            id="plotYlim1" value="0">
-                    </div>
-
-                    <div class="col-md-2">
-                        <label class="form-label">Limite Y Final</label>
-                        <input type="number" class="form-control" 
-                            id="plotYlim2" value="100">
-                    </div>
-                </div>
-
-                <button type="button" class="btn btn-primary mt-4 w-100" onclick="generatePlot()">
-                    <span class="upload-text">Gerar Plotagem</span>
-                    <span class="spinner-border spinner-border-sm" style="display: none"></span>
-                </button>
-
-                <!-- Área de Visualização -->
-                <div class="mt-4 text-center" id="plotPreview">
-                    <div class="alert alert-info alert-dismissible fade show">
-                        Selecione os parâmetros e clique em "Gerar Plotagem"
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                    </div>
-                    <img id="plotImage" class="img-fluid" style="display: none;">
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Plotagem de Trajetórias com Background -->
+    <!-- Plotagem de Trajetórias-->
     <div class="main-card p-4 mt-5">
-        <h3 class="mb-4">Plotagem de Trajetórias com Background</h3>
-
-        <!-- Upload de Imagem -->
-        <div class="col-md-3">
-            <label class="form-label">Imagem de Fundo (JPG/PNG)</label>
-            <input type="file" class="form-control" id="bgImageUpload" accept="image/*">
-            <small class="form-text text-muted">Tamanho máximo: 5MB</small>
-        </div>
+        <h2 class="mb-4">Visualizar Trajetórias</h2>
 
         <!-- Seção de Controles -->
         <div class="row g-3" id="plotBackgroundControls">
@@ -183,9 +46,10 @@
                 <select class="form-select" id="plotBackgroundType" onchange="updateBgPlotControls()">
                     <option value="/plot_with_background">Plot Básico</option>
                     <option value="/plot_one_category">Plot de Categoria Específica</option>
-                    <option value="/plot_with_limits">Plot com Limites e Referência</option>
+                    <option value="/plot_with_limits">Plot com Limite de Referência</option>
                     <option value="/plot_start_finish">Plot com Partida/Chegada</option>
                     <option value="/plot_with_stopped">Plot para Identificar Objetos Parados</option>
+                    <option value="/plot_with_stop_rec">Plot para Identificar Objetos Parados em uma Área</option>
                 </select>
             </div>
 
@@ -201,15 +65,64 @@
             </div>
 
             <!-- Campos Dinâmicos -->
-            <div class="row mb-3">
+            <div class="row mb-3 mt-2">
                 <div class="col-md-4" id="bgCategoryField" style="display:none;">
                     <label class="form-label">Categoria</label>
-                    <input type="number" step="0.1" class="form-control" id="bgCategory">
+                    <input type="number" step="0.1" class="form-control" id="bgCategory" placeholder="Ex: 2">
+                </div>
+
+                <div class="col-md-4" id="bgStopThresholdField" style="display:none;">
+                    <label class="form-label">Distância Limite (pixels)</label>
+                    <input type="number" step="0.1" class="form-control" value="5"
+                        id="bgStopThreshold"
+                        name="stop_threshold">
+                </div>
+
+                <div class="col-md-4" id="bgMinDurationField" style="display:none;">
+                    <label class="form-label">Tempo Limite (segundos)</label>
+                    <input type="number" step="0.1" class="form-control" value="30"
+                        id="bgMinDuration"
+                        name="min_duration">
+                </div>
+
+                <div class="col-md-4" id="bgNoiseToleranceField" style="display:none;">
+                    <label class="form-label">Tolerância (pixels)</label>
+                    <input type="number" step="0.1" class="form-control" value="1"
+                        id="bgNoiseTolerance"
+                        name="noise_tolerance">
+                </div>
+
+                <div class="col-md-4" id="bgRectMinXField" style="display:none;">
+                    <label class="form-label">Base Inicial (pixels)</label>
+                    <input type="number" step="0.1" class="form-control" value="0"
+                        id="bgRectMinX"
+                        name="rect_min_x">
+                </div>
+
+                <div class="col-md-4" id="bgRectMaxXField" style="display:none;">
+                    <label class="form-label">Base Final (pixels)</label>
+                    <input type="number" step="0.1" class="form-control" value="100"
+                        id="bgRectMaxX"
+                        name="rect_max_x">
+                </div>
+
+                <div class="col-md-4" id="bgRectMinYField" style="display:none;">
+                    <label class="form-label">Altura Inicial (pixels)</label>
+                    <input type="number" step="0.1" class="form-control" value="0"
+                        id="bgRectMinY"
+                        name="rect_min_y">
+                </div>
+
+                <div class="col-md-4" id="bgRectMaxYField" style="display:none;">
+                    <label class="form-label">Altura Final (pixels)</label>
+                    <input type="number" step="0.1" class="form-control" value="100"
+                        id="bgRectMaxY"
+                        name="rect_max_y">
                 </div>
 
                 <div class="col-md-4" id="bgReferenceLineField" style="display:none;">
                     <label class="form-label">Linha de Referência (WKT)</label>
-                    <input type="text" class="form-control" 
+                    <input type="text" step="0.1" class="form-control" 
                         id="bgReferenceLine"
                         name="reference_line"
                         placeholder="Ex: LINESTRING(10 20, 30 40)">
@@ -217,7 +130,7 @@
 
                 <div class="col-md-4" id="bgDepartureField" style="display: none;">
                     <label class="form-label">Linha de Partida (WKT)</label>
-                    <input type="text" class="form-control" 
+                    <input type="text" step="0.1" class="form-control" 
                         id="bgDepartureLine"
                         name="departure_line"
                         placeholder="Ex: LINESTRING(0 0, 50 100)">
@@ -225,7 +138,7 @@
 
                 <div class="col-md-4" id="bgStartFinishField" style="display:none;">
                     <label class="form-label">Linha de Chegada (WKT)</label>
-                    <input type="text" class="form-control" 
+                    <input type="text" step="0.1" class="form-control" 
                         id="bgFinishLine"
                         name="finish_line"
                         placeholder="Ex: LINESTRING(50 60, 70 80)">
@@ -248,71 +161,51 @@
             <!-- Dimensões -->
             <div class="col-md-3">
                 <label class="form-label">Largura (cm)</label>
-                <input type="number" step="0.1" class="form-control" id="bgXsize" value="10">
+                <input type="number" step="0.1" class="form-control" id="bgXsize" value="10"
+                placeholder="Máx: 50">
             </div>
 
             <div class="col-md-3">
                 <label class="form-label">Altura (cm)</label>
-                <input type="number" step="0.1" class="form-control" id="bgYsize" value="10">
+                <input type="number" step="0.1" class="form-control" id="bgYsize" value="10"
+                placeholder="Máx: 50">
             </div>
 
             <!-- Limites -->
             <div class="col-md-3">
-                <label class="form-label">Limite X Inicial</label>
+                <label class="form-label">Latitude Inicial</label>
                 <input type="number" step="0.1" class="form-control" id="bgXlim1" value="0">
             </div>
 
             <div class="col-md-3">
-                <label class="form-label">Limite X Final</label>
+                <label class="form-label">Latitude Final</label>
                 <input type="number" step="0.1" class="form-control" id="bgXlim2" value="100">
             </div>
 
             <div class="col-md-3">
-                <label class="form-label">Limite Y Inicial</label>
+                <label class="form-label">Longitude Inicial</label>
                 <input type="number" step="0.1" class="form-control" id="bgYlim1" value="0">
             </div>
 
             <div class="col-md-3">
-                <label class="form-label">Limite Y Final</label>
+                <label class="form-label">Longitude Final</label>
                 <input type="number" step="0.1" class="form-control" id="bgYlim2" value="100">
             </div>
-
-            <!-- Processamento -->
-            <div class="col-md-3">
-                <label class="form-label">Min X (Imagem)</label>
-                <input type="number" class="form-control" id="bgMinX" value="0">
-            </div>
-
-            <div class="col-md-3">
-                <label class="form-label">Max X (Imagem)</label>
-                <input type="number" class="form-control" id="bgMaxX" value="100">
-            </div>
-
-            <div class="col-md-3">
-                <label class="form-label">Min Y (Imagem)</label>
-                <input type="number" class="form-control" id="bgMinY" value="0">
-            </div>
-
-            <div class="col-md-3">
-                <label class="form-label">Max Y (Imagem)</label>
-                <input type="number" class="form-control" id="bgMaxY" value="100">
-            </div>
-        </div>
 
         <!-- Botão e Preview -->
         <div class="mt-4">
             <button class="btn btn-primary w-100" onclick="generateBgPlot()">
-                <span class="upload-text">Gerar plotagem</span>
+                <span class="upload-text">Gerar Plot</span>
                 <span class="spinner-border spinner-border-sm" style="display:none;"></span>
             </button>
         </div>
 
         <div class="mt-4 text-center">
             <div class="alert alert-info alert-dismissible fade show">
-                Selecione os parâmetros e clique em "Gerar Plotagem"
+                Selecione os parâmetros e clique em "Gerar Plot"
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>
-            <img id="bgPlotImage" class="img-fluid rounded" style="display:none; max-height:70vh;">
+            <img id="bgPlotImage" class="img-fluid rounded" style="display:none;">
         </div>
     </div>
 

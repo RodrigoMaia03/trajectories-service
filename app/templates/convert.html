@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Trajectories - Conversor</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+    </head>
+
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('home') }}">Smart Trajectories</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('home') }}">Início</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('camera') }}">Cadastro de Câmera</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="{{ url_for('converter') }}">Conversor de Trajetórias</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('howtouse') }}">Como Usar</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container py-5">
+        <div class="row">
+            <div class="col-md-8">
+                <div class="main-card p-4 mb-4">
+                    <h2 class="mb-4">Conversor de Arquivos TXT</h2>
+                    <div class="mb-4">
+                        <label class="form-label">Arquivo de Referência</label>
+                        <div class="drop-zone" id="dropZone">
+                            <p>Arraste seu arquivo TXT aqui ou clique para selecionar</p>
+                            <input type="file" id="fileInput" accept=".txt" hidden>
+                        </div>
+                        <small class="form-text text-muted">Tamanho máximo: 5MB</small>
+                    </div>
+
+                    <div class="mt-4">
+                        <form id="conversionForm">
+                            <div class="mb-3">
+                                <label for="cameraInput" class="form-label">Câmera/Background</label>
+                                <input type="text" class="form-control" id="cameraInput" required>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="conversionType" class="form-label">Tipo de Conversão</label>
+                                <select class="form-select" id="conversionType">
+                                    <option value="/upload_txt_to_csv">Conversão Básica</option>
+                                    <option value="/upload_txt_to_csv_datetime">Conversão com Datetime</option>
+                                </select>
+                            </div>
+
+                            <div class="progress-bar mb-3">
+                                <div class="progress-fill" style="width: 0%"></div>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary w-100">
+                                <span class="upload-text">Converter Arquivo</span>
+                                <span class="spinner-border spinner-border-sm" style="display: none"></span>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="main-card p-4">
+                    <h5 class="mb-3">Pré-visualização</h5>
+                    <div id="filePreview" class="mb-4"></div>
+    
+                    <h5 class="mb-3">Últimas Conversões</h5>
+                    <div class="file-list" id="conversionHistory"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="static/js/convert.js"></script>
+</body>
+</html>

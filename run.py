@@ -15,12 +15,12 @@ from datetime import datetime
 from shapely.errors import ShapelyError
 from functools import wraps
 from flask.json.provider import DefaultJSONProvider
-from app.utils import JSONEncoder, create_trajectory_collection_mongodb
+from app.utils import JSONEncoder, create_trajectory_collection_mongodb, allowed_file
 from smart_traject.smart_trajectories.convert import txt_to_csv, txt_to_csv_datetime
 from smart_traject.smart_trajectories.processing import generate_trajectory_collection
-from smart_traject.smart_trajectories.plot import plot_trajectories, plot_trajectories_categorized, plot_trajectories_one_category, plot_trajectories_with_background
-from smart_traject.smart_trajectories.plot import plot_trajectories_one_category_background, plot_trajectories_with_limits, plot_trajectories_with_start_finish, plot_trajectories_with_stopped
-from config import INPUT_DATA_DIR, OUTPUT_DATA_DIR, MONGODB_URI, DB_NAME, COLLECTION_NAME, OUTPUT_DATA_DIR2
+from smart_traject.smart_trajectories.plot import plot_trajectories_with_background, plot_trajectories_one_category_background, plot_trajectories_with_stop_in_rectangle
+from smart_traject.smart_trajectories.plot import plot_trajectories_with_limits, plot_trajectories_with_start_finish, plot_trajectories_with_stopped
+from config import INPUT_DATA_DIR, INPUT_DATA_DIR2, OUTPUT_DATA_DIR, OUTPUT_DATA_DIR2, MONGODB_URI, DB_NAME, COLLECTION_TRAJ, COLLECTION_CAM
 
 
 def handle_plot_errors(f):
@@ -41,7 +41,8 @@ class UTF8JSONProvider(DefaultJSONProvider):
 # Configura o MongoDB
 client = MongoClient(MONGODB_URI)
 db = client[DB_NAME]
-collection = db[COLLECTION_NAME]
+collection_traj = db[COLLECTION_TRAJ]
+collection_cam = db[COLLECTION_CAM]
 
 #Cria a aplicação Flask
 app = create_app() 
@@ -52,17 +53,94 @@ app.config.update(JSON_AS_ASCII=False, JSONIFY_PRETTYPRINT_REGULAR=True)
 def home():
     return render_template('index.html')
 
+@app.route('/cam', methods=['GET'])
+def camera():
+    return render_template('cam.html')
+
+@app.route('/convert', methods=['GET'] )
+def converter():
+    return render_template('convert.html')
+
+@app.route('/howtouse', methods=['GET'] )
+def howtouse():
+    return render_template('howtouse.html')
+
+@app.route('/register_camera', methods=['POST'])
+def register_camera():
+    try:
+        name = request.form['name']
+        image = request.files['image']
+        
+        # Verificação básica dos campos
+        if 'name' not in request.form or 'image' not in request.files:
+            return jsonify({'status': 'error', 'message': 'Campos obrigatórios ausentes'}), 400
+
+        # Verificação de formato
+        if not allowed_file(image.filename):
+            return jsonify({'status': 'error', 'message': 'Apenas JPG, JPEG e PNG são permitidos'}), 400
+
+        # Verificação de duplicatas
+        if collection_cam.find_one({'name': name}):
+            return jsonify({'status': 'error', 'message': f'Câmera {name} já existe'}), 409
+
+        # Nome seguro com timestamp para evitar colisões
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        filename = f"{secure_filename(name)}_{timestamp}{os.path.splitext(image.filename)[1]}"
+        image_path = os.path.join(INPUT_DATA_DIR2, filename)
+        image.save(image_path)
+
+        # Estrutura do Documento no MongoDB 
+        camera_data = {
+            "name": name,
+            "image_path": image_path,
+            "created_at": datetime.now(),
+            "metadata": {
+                "coordinate_system": "pixel",
+                "resolution": "native"
+            }
+        }
+
+        # Inserindo no MongoDb
+        result = collection_cam.insert_one(camera_data)
+
+        # Controle de transação e resposta
+        if not result.inserted_id:
+            return jsonify({'status': 'error', 'message': 'Erro ao inserir no banco'}), 500
+
+        return jsonify({
+            'status': 'success',
+            'message': 'Câmera registrada',
+            'camera_id': str(result.inserted_id),
+            'image_path': image_path
+        }), 201
+
+    except Exception as e:
+        current_app.logger.error(f"Erro no registro de câmera: {str(e)}")
+        return jsonify({'status': 'error', 'message': 'Erro interno'}), 500
+
 
 @app.route('/upload_txt_to_csv', methods=['POST'])
 def upload_txt_to_csv():
     if 'file' not in request.files:
-        return redirect(url_for('home'))
+        return jsonify({
+            'status': 'error',
+            'message': 'Nenhum arquivo enviado'
+        }), 400
     
     camera = request.form.get('camera')
     txt_file = request.files['file']
     
     if txt_file.filename == '':
-        return redirect(url_for('home'))
+        return jsonify({
+            'status': 'error',
+            'message': 'Campo nome vazio'
+        }), 400
+    
+    if not collection_cam.find_one({'name': camera}):
+        return jsonify({
+            'status': 'error',
+            'message': f'Câmera {camera} não cadastrada'
+        }), 400
 
     # Salva o arquivo .txt
     txt_filename = secure_filename(txt_file.filename)
@@ -87,7 +165,6 @@ def upload_txt_to_csv():
         for traj in traj_collection:
             trajectory_data = {
                 "identifier": traj.id,
-                # "category": traj.category,
                 "category": traj.df['category'].iloc[0],
                 "start_time": traj.get_start_time().isoformat(),
                 "end_time": traj.get_end_time().isoformat(),
@@ -95,12 +172,9 @@ def upload_txt_to_csv():
                 "background": camera,
                 "points": [
                     {
-                        #"timestamp": point[0].isoformat(),
-                        #"geometry": Point(point[1], point[2]).wkt
                         "timestamp": row.name.isoformat(),
                         "geometry": row.geometry.wkt   
                     }
-                    #for point in traj.points
                     for _, row in traj.df.iterrows()
                 ]
             }
@@ -108,7 +182,7 @@ def upload_txt_to_csv():
         
         # Insere no MongoDB
         if mongo_docs:
-            collection.insert_many(mongo_docs)
+            collection_traj.insert_many(mongo_docs)
         
         # Cria e retorna o JSON
         json_filename = os.path.splitext(txt_filename)[0] + '_converted.json'
@@ -129,13 +203,25 @@ def upload_txt_to_csv():
 @app.route('/upload_txt_to_csv_datetime', methods=['POST'])
 def upload_txt_to_csv_datetime():
     if 'file' not in request.files:
-        return redirect(url_for('home'))
+        return jsonify({
+            'status': 'error',
+            'message': 'Nenhum arquivo enviado'
+        }), 400
     
     camera = request.form.get('camera')
     txt_file = request.files['file']
     
     if txt_file.filename == '':
-        return redirect(url_for('home'))
+        return jsonify({
+            'status': 'error',
+            'message': 'Campo nome vazio'
+        }), 400
+    
+    if not collection_cam.find_one({'name': camera}):
+        return jsonify({
+            'status': 'error',
+            'message': f'Câmera {camera} não cadastrada'
+        }), 400
 
     # Salva o arquivo .txt
     txt_filename = secure_filename(txt_file.filename)
@@ -167,12 +253,9 @@ def upload_txt_to_csv_datetime():
                 "background": camera,
                 "points": [
                     {
-                        #"timestamp": point[0].isoformat(),
-                        #"geometry": Point(point[1], point[2]).wkt
                         "timestamp": row.name.isoformat(),
                         "geometry": row.geometry.wkt   
                     }
-                    #for point in traj.points
                     for _, row in traj.df.iterrows()
                 ]
             }
@@ -180,7 +263,7 @@ def upload_txt_to_csv_datetime():
         
         # Insere no MongoDB
         if mongo_docs:
-            collection.insert_many(mongo_docs)
+            collection_traj.insert_many(mongo_docs)
         
         # Cria e retorna o JSON
         json_filename = os.path.splitext(txt_filename)[0] + '_converted_datetime.json'
@@ -200,396 +283,212 @@ def upload_txt_to_csv_datetime():
             'status': 'error',
             'message': f'Erro ao processar o arquivo: {str(e)}'
         }), 500    
-        
-@app.route('/plot_trajectories', methods=['GET'])
-@handle_plot_errors
-def get_trajectories_plot():
-    # Recupera parâmetros da requisição
-    camera = request.args.get('camera', '')
-    selectedDate = request.args.get('selectedDate')
-    if not selectedDate:
-        raise ValueError("Parâmetro 'selectedDate' obrigatório")
-    try:
-        datetime.strptime(selectedDate, '%Y-%m-%d')
-    except ValueError:
-        raise ValueError("Formato de data inválido")
-    
-    startTime = request.args.get('startTime', type=float)
-    endTime = request.args.get('endTime', type=float)
-    
-    query = {}
-    
-    if selectedDate:
-        hours = int(startTime)
-        minutes = int((startTime - hours) * 60)
-        hours1 = int(endTime)
-        minutes1 = int((endTime - hours1) * 60)
-        query_date_start = f"{selectedDate}T{hours:02}:{minutes:02}:00"
-        query_date_end = f"{selectedDate}T{hours1:02}:{minutes1:02}:00"
-        query["start_time"] = {"$lte": query_date_end}
-        query["end_time"] = {"$gte": query_date_start}
 
-    if camera:
-        query["background"] = camera
-    
-    try:
-        # Cria a coleção diretamente do MongoDB
-        traj_collection = create_trajectory_collection_mongodb(query)
-        if len(traj_collection) == 0:
-            return jsonify({
-                'status': 'error',
-                'message': 'Nenhuma trajetória encontrada com os filtros aplicados.'
-            }), 404
-        
-        # Gera o plot
-        buffer = io.BytesIO()
-        plot_trajectories(
-            traj_collection,
-            xsize=request.args.get('xsize', 10, type=float),
-            ysize=request.args.get('ysize', 10, type=float),
-            xlim1=request.args.get('xlim1', 0, type=float),
-            xlim2=request.args.get('xlim2', 100, type=float),
-            ylim1=request.args.get('ylim1', 0, type=float),
-            ylim2=request.args.get('ylim2', 100, type=float)
-        )
-        
-        plt.savefig(buffer, format='png')
-        buffer.seek(0)
-        plt.close()
-        
-        return send_file(buffer, mimetype='image/png')
-    
-    except Exception as e:
-        response = jsonify({'status': 'error', 'message': f'Erro ao gerar trajetórias: {str(e)}'})
-        response.headers['Content-Type'] = 'application/json; charset=utf-8'
-        return response, 500
-    
-
-@app.route('/plot_trajectories_categorized', methods=['GET'])
-@handle_plot_errors
-def get_categorized_plot():
-    camera = request.args.get('camera', '')
-    selectedDate = request.args.get('selectedDate')
-    if not selectedDate:
-        raise ValueError("Parâmetro 'selectedDate' obrigatório")
-    try:
-        datetime.strptime(selectedDate, '%Y-%m-%d')
-    except ValueError:
-        raise ValueError("Formato de data inválido")
-    
-    startTime = request.args.get('startTime', type=float)
-    endTime = request.args.get('endTime', type=float)
-    
-    query = {}
-    
-    if selectedDate:
-        hours = int(startTime)
-        minutes = int((startTime - hours) * 60)
-        hours1 = int(endTime)
-        minutes1 = int((endTime - hours1) * 60)
-        query_date_start = f"{selectedDate}T{hours:02}:{minutes:02}:00"
-        query_date_end = f"{selectedDate}T{hours1:02}:{minutes1:02}:00"
-        query["start_time"] = {"$lte": query_date_end}
-        query["end_time"] = {"$gte": query_date_start}
-
-    if camera:
-        query["background"] = camera
-    
-    try:
-        # Cria a coleção diretamente do MongoDB
-        traj_collection = create_trajectory_collection_mongodb(query)
-        if len(traj_collection) == 0:
-            return jsonify({
-                'status': 'error',
-                'message': 'Nenhuma trajetória encontrada com os filtros aplicados.'
-            }), 404
-        
-        # Gera o plot
-        buffer = io.BytesIO()
-        plot_trajectories_categorized(
-            traj_collection,
-            xsize=request.args.get('xsize', 10, type=float),
-            ysize=request.args.get('ysize', 10, type=float),
-            xlim1=request.args.get('xlim1', 0, type=float),
-            xlim2=request.args.get('xlim2', 100, type=float),
-            ylim1=request.args.get('ylim1', 0, type=float),
-            ylim2=request.args.get('ylim2', 100, type=float)
-        )
-        
-        plt.savefig(buffer, format='png')
-        buffer.seek(0)
-        plt.close()
-        
-        return send_file(buffer, mimetype='image/png')
-    
-    except Exception as e:
-        response = jsonify({'status': 'error', 'message': f'Erro ao gerar trajetórias: {str(e)}'})
-        response.headers['Content-Type'] = 'application/json; charset=utf-8'
-        return response, 500
-
-
-@app.route('/plot_trajectories_one_category', methods=['GET'])
-@handle_plot_errors
-def get_trajectories_one_category():
-    # Validação inicial
-    category = request.args.get('category')
-    camera = request.args.get('camera', '')
-    if category is None:
-        return jsonify({'status': 'error', 'message': 'Parâmetro "category" obrigatório'}), 400
-    try:
-        category = request.args.get('category', type=int)
-    except ValueError:
-        return jsonify({'status': 'error', 'message': 'Categoria deve ser um número'}), 400
-    
-    selectedDate = request.args.get('selectedDate')
-    if not selectedDate:
-        raise ValueError("Parâmetro 'selectedDate' obrigatório")
-    try:
-        datetime.strptime(selectedDate, '%Y-%m-%d')
-    except ValueError:
-        raise ValueError("Formato de data inválido")
-    
-    startTime = request.args.get('startTime', type=float)
-    endTime = request.args.get('endTime', type=float)
-    
-    query = {}
-    query["category"] = category
-    
-    if selectedDate:
-        hours = int(startTime)
-        minutes = int((startTime - hours) * 60)
-        hours1 = int(endTime)
-        minutes1 = int((endTime - hours1) * 60)
-        query_date_start = f"{selectedDate}T{hours:02}:{minutes:02}:00"
-        query_date_end = f"{selectedDate}T{hours1:02}:{minutes1:02}:00"
-        query["start_time"] = {"$lte": query_date_end}
-        query["end_time"] = {"$gte": query_date_start}
-    if camera:
-        query["background"] = camera
-    
-    try:
-        # Cria a coleção diretamente do MongoDB
-        traj_collection = create_trajectory_collection_mongodb(query)
-        if len(traj_collection) == 0:
-            return jsonify({
-                'status': 'error',
-                'message': 'Nenhuma trajetória encontrada com os filtros aplicados.'
-            }), 404
-        
-        # Gera o plot
-        buffer = io.BytesIO()
-        plot_trajectories_one_category(
-            traj_collection,
-            category=category,
-            xsize=request.args.get('xsize', 10, type=float),
-            ysize=request.args.get('ysize', 10, type=float),
-            xlim1=request.args.get('xlim1', 0, type=float),
-            xlim2=request.args.get('xlim2', 100, type=float),
-            ylim1=request.args.get('ylim1', 0, type=float),
-            ylim2=request.args.get('ylim2', 100, type=float)
-        )
-        
-        plt.savefig(buffer, format='png')
-        buffer.seek(0)
-        plt.close()
-        
-        return send_file(buffer, mimetype='image/png')
-    
-    except Exception as e:
-        response = jsonify({'status': 'error', 'message': f'Erro ao gerar trajetórias: {str(e)}'})
-        response.headers['Content-Type'] = 'application/json; charset=utf-8'
-        return response, 500
 
 @app.route('/plot_with_background', methods=['POST'])
 @handle_plot_errors
 def plot_with_background():
     buffer = io.BytesIO()
     
-    if 'background_image' not in request.files:
-        return jsonify({'status': 'error', 'message': 'Nenhuma imagem enviada'}), 400
-    background_file = request.files['background_image']
-    if background_file.filename == '':
-        return jsonify({'status': 'error', 'message': 'Arquivo não selecionado'}), 400
+    # Obter nome da câmera
+    camera = request.form.get('camera')
+    if not camera:
+        return jsonify({'status': 'error', 'message': 'Nome da câmera obrigatório'}), 400
+
+    # Buscar imagem da câmera no banco de dados
+    camera_data = collection_cam.find_one({'name': camera})
+    if not camera_data:
+        return jsonify({'status': 'error', 'message': f'Câmera {camera} não encontrada'}), 404
+
+    image_path = camera_data.get('image_path')
+    if not image_path or not os.path.isfile(image_path):
+        return jsonify({'status': 'error', 'message': 'Imagem da câmera não disponível'}), 404
+
+    # Restante dos parâmetros
+    selectedDate = request.form.get('selected_date')
+    if not selectedDate:
+        return jsonify({'status': 'error', 'message': "Parâmetro 'selectedDate' obrigatório"}), 400
+
+    try:
+        datetime.strptime(selectedDate, '%Y-%m-%d')
+    except ValueError:
+        return jsonify({'status': 'error', 'message': 'Formato de data inválido'}), 400
+
+    # Construção da query
+    query = {}
     
-    with tempfile.TemporaryDirectory() as temp_dir:
-        filename = secure_filename(background_file.filename)
-        temp_path = os.path.join(temp_dir, filename)
-        background_file.save(temp_path)
-        
-        if not os.path.isfile(temp_path):
-            return jsonify({'status': 'error', 'message': 'Falha ao salvar imagem temporária'}), 500
-        
-        camera = request.form.get('camera', '')
-        selectedDate = request.form.get('selected_date')
-        
-        if not selectedDate:
-            return jsonify({'status': 'error', 'message': "Parâmetro 'selectedDate' obrigatório"}), 400
-        
-        try:
-            datetime.strptime(selectedDate, '%Y-%m-%d')
-        except ValueError:
-            return jsonify({'status': 'error', 'message': 'Formato de data inválido'}), 400
-        
-        startTime = request.form.get('start_time', type=float)
-        endTime = request.form.get('end_time', type=float)
-        
-        query = {}
-        if selectedDate:
-            hours = int(startTime)
-            minutes = int((startTime - hours) * 60)
-            hours1 = int(endTime)
-            minutes1 = int((endTime - hours1) * 60)
-            query_date_start = f"{selectedDate}T{hours:02}:{minutes:02}:00"
-            query_date_end = f"{selectedDate}T{hours1:02}:{minutes1:02}:00"
-            query["start_time"] = {"$lte": query_date_end}
-            query["end_time"] = {"$gte": query_date_start}
-        
-        if camera:
-            query["background"] = camera
+    try:
+        startTime = float(request.form.get('start_time', 0))
+        endTime = float(request.form.get('end_time', 24))
+    except ValueError:
+        return jsonify({'status': 'error', 'message': 'Valores de tempo inválidos'}), 400
 
-        try:
-            plot_params = {
-                'xsize': float(request.form.get('xsize', 10)),
-                'ysize': float(request.form.get('ysize', 10)),
-                'xlim1': float(request.form.get('xlim1', 0)),
-                'xlim2': float(request.form.get('xlim2', 100)),
-                'ylim1': float(request.form.get('ylim1', 0)),
-                'ylim2': float(request.form.get('ylim2', 100)),
-                'min_x': float(request.form.get('min_x', 0)),
-                'max_x': float(request.form.get('max_x', 100)),
-                'min_y': float(request.form.get('min_y', 0)),
-                'max_y': float(request.form.get('max_y', 100))
-            } 
-        except ValueError as e:
-            return jsonify({'status': 'error', 'message': f'Parâmetro numérico inválido: {str(e)}'}), 400
+    if selectedDate:
+        hours_init = int(startTime)
+        minutes_init = int((startTime - hours_init) * 60)
+        hours_end = int(endTime)
+        minutes_end = int((endTime - hours_end) * 60)
+        query_date_start = f"{selectedDate}T{hours_init:02}:{minutes_init:02}:00"
+        query_date_end = f"{selectedDate}T{hours_end:02}:{minutes_end:02}:00"
+        query["start_time"] = {"$lte": query_date_end}
+        query["end_time"] = {"$gte": query_date_start}
         
-        try:
-            traj_collection = create_trajectory_collection_mongodb(query)
-            if len(traj_collection) == 0:
-                return jsonify({'status': 'error', 'message': 'Nenhuma trajetória encontrada'}), 404
-            
-            plot_trajectories_with_background(
-                traj_collection, 
-                temp_path,
-                **plot_params)
-            
-            plt.savefig(buffer, format='png', bbox_inches='tight')
-            plt.close()
-            buffer.seek(0)
-            image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
-            return jsonify({
-                "status": "success",
-                "image": image_base64
-            })
-        
-        except Exception as e:
-            return jsonify({'status': 'error', 'message': f'Erro ao gerar plot: {str(e)}'}), 500
+    if camera:
+        query["background"] = camera
 
 
-@app.route('/plot_one_category', methods=['POST'])  # Alterado para POST
+    # Parâmetros do plot
+    try:
+        plot_params = {
+            'xsize': float(request.form.get('xsize', 10)),
+            'ysize': float(request.form.get('ysize', 10)),
+            'xlim1': float(request.form.get('xlim1', 0)),
+            'xlim2': float(request.form.get('xlim2', 100)),
+            'ylim1': float(request.form.get('ylim1', 0)),
+            'ylim2': float(request.form.get('ylim2', 100)),
+	        'min_x': min(float(request.form.get('xlim1')), float(request.form.get('xlim2'))),
+            'max_x': max(float(request.form.get('xlim1')), float(request.form.get('xlim2'))),
+            'min_y': min(float(request.form.get('ylim1')), float(request.form.get('ylim2'))),
+            'max_y': max(float(request.form.get('ylim1')), float(request.form.get('ylim2')))
+        }
+    except ValueError as e:
+        return jsonify({'status': 'error', 'message': f'Parâmetro numérico inválido: {str(e)}'}), 400
+
+    try:
+        # Buscar trajetórias
+        traj_collection = create_trajectory_collection_mongodb(query)
+        
+        if not traj_collection:
+            return jsonify({'status': 'error', 'message': 'Nenhuma trajetória encontrada para o período'}), 404
+
+        # Gerar plot com imagem do banco
+        plot_trajectories_with_background(
+            traj_collection,
+            image_path,
+            **plot_params
+        )
+        
+        plt.savefig(buffer, format='png', bbox_inches='tight', dpi=300)
+        plt.close()
+        buffer.seek(0)
+        
+        return jsonify({
+            "status": "success",
+            "image": base64.b64encode(buffer.getvalue()).decode('utf-8')
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Erro no plot: {str(e)}")
+        return jsonify({'status': 'error', 'message': f'Erro ao gerar plot: {str(e)}'}), 500
+
+
+@app.route('/plot_one_category', methods=['POST'])
 @handle_plot_errors
 def plot_one_category():
     buffer = io.BytesIO()
     
-    # Validação do arquivo de imagem
-    if 'background_image' not in request.files:
-        return jsonify({'status': 'error', 'message': 'Nenhuma imagem enviada'}), 400
+    # Obter nome da câmera
+    camera = request.form.get('camera')
+    if not camera:
+        return jsonify({'status': 'error', 'message': 'Nome da câmera obrigatório'}), 400
+
+    # Buscar imagem da câmera no banco de dados
+    camera_data = collection_cam.find_one({'name': camera})
+    if not camera_data:
+        return jsonify({'status': 'error', 'message': f'Câmera {camera} não encontrada'}), 404
+
+    image_path = camera_data.get('image_path')
+    if not image_path or not os.path.isfile(image_path):
+        return jsonify({'status': 'error', 'message': 'Imagem da câmera não disponível'}), 404
+
+    # Restante dos parâmetros
+    selectedDate = request.form.get('selected_date')
+    if not selectedDate:
+        return jsonify({'status': 'error', 'message': "Parâmetro 'selectedDate' obrigatório"}), 400
+
+    try:
+        datetime.strptime(selectedDate, '%Y-%m-%d')
+    except ValueError:
+        return jsonify({'status': 'error', 'message': 'Formato de data inválido'}), 400
+
+    category = request.form.get('category')
+    if not category:
+        return jsonify({'status': 'error', 'message': "Parâmetro 'categoria' obrigatório"}), 400
+
+    try:
+        category = request.form.get('category', type=int)
+    except ValueError:
+        return jsonify({'status': 'error', 'message': 'Categoria deve ser um número'}), 400
+        
+    # Construção da query
+    query = {}
     
-    background_file = request.files['background_image']
-    if background_file.filename == '':
-        return jsonify({'status': 'error', 'message': 'Arquivo não selecionado'}), 400
-    
-    # Cria diretório temporário seguro
-    with tempfile.TemporaryDirectory() as temp_dir:
-        # Salva a imagem temporariamente
-        filename = secure_filename(background_file.filename)
-        temp_path = os.path.join(temp_dir, filename)
-        background_file.save(temp_path)
-        
-        # Verifica se é uma imagem válida
-        if not os.path.isfile(temp_path):
-            return jsonify({'status': 'error', 'message': 'Falha ao salvar imagem temporária'}), 500
-        
-        camera = request.form.get('camera', '')
-        category = request.form.get('category')
-        selectedDate = request.form.get('selected_date')
+    try:
+        startTime = float(request.form.get('start_time', 0))
+        endTime = float(request.form.get('end_time', 24))
+    except ValueError:
+        return jsonify({'status': 'error', 'message': 'Valores de tempo inválidos'}), 400
 
-        try:
-            category = request.form.get('category', type=int)
-        except ValueError:
-            return jsonify({'status': 'error', 'message': 'Categoria deve ser um número'}), 400
+    if category:
+        query["category"] = category
 
-        if not selectedDate:
-            return jsonify({'status': 'error', 'message': "Parâmetro 'selectedDate' obrigatório"}), 400
-
-        try:
-            datetime.strptime(selectedDate, '%Y-%m-%d')
-        except ValueError:
-            return jsonify({'status': 'error', 'message': 'Formato de data inválido'}), 400
-
+    if selectedDate:
+        hours_init = int(startTime)
+        minutes_init = int((startTime - hours_init) * 60)
+        hours_end = int(endTime)
+        minutes_end = int((endTime - hours_end) * 60)
+        query_date_start = f"{selectedDate}T{hours_init:02}:{minutes_init:02}:00"
+        query_date_end = f"{selectedDate}T{hours_end:02}:{minutes_end:02}:00"
+        query["start_time"] = {"$lte": query_date_end}
+        query["end_time"] = {"$gte": query_date_start}
         
-        startTime = request.form.get('start_time', type=float)
-        endTime = request.form.get('end_time', type=float)
-        
-        query = {}
-        
-        if selectedDate:
-            hours = int(startTime)
-            minutes = int((startTime - hours) * 60)
-            hours1 = int(endTime)
-            minutes1 = int((endTime - hours1) * 60)
-            query_date_start = f"{selectedDate}T{hours:02}:{minutes:02}:00"
-            query_date_end = f"{selectedDate}T{hours1:02}:{minutes1:02}:00"
-            query["start_time"] = {"$lte": query_date_end}
-            query["end_time"] = {"$gte": query_date_start}
+    if camera:
+        query["background"] = camera
 
-        if camera:
-            query["background"] = camera
-            
-        if category:
-            query["category"] = category
-            
-        try:
-            # Converte parâmetros numéricos
-            plot_params = {
-                'xsize': float(request.form.get('xsize', 10)),
-                'ysize': float(request.form.get('ysize', 10)),
-                'xlim1': float(request.form.get('xlim1', 0)),
-                'xlim2': float(request.form.get('xlim2', 100)),
-                'ylim1': float(request.form.get('ylim1', 0)),
-                'ylim2': float(request.form.get('ylim2', 100)),
-                'min_x': float(request.form.get('min_x', 0)),
-                'max_x': float(request.form.get('max_x', 100)),
-                'min_y': float(request.form.get('min_y', 0)),
-                'max_y': float(request.form.get('max_y', 100))
-            }
-        except ValueError as e:
-            return jsonify({'status': 'error', 'message': f'Parâmetro numérico inválido: {str(e)}'}), 400
+    # Parâmetros do plot
+    try:
+        plot_params = {
+            'xsize': float(request.form.get('xsize', 10)),
+            'ysize': float(request.form.get('ysize', 10)),
+            'xlim1': float(request.form.get('xlim1', 0)),
+            'xlim2': float(request.form.get('xlim2', 100)),
+            'ylim1': float(request.form.get('ylim1', 0)),
+            'ylim2': float(request.form.get('ylim2', 100)),
+	        'min_x': min(float(request.form.get('xlim1')), float(request.form.get('xlim2'))),
+            'max_x': max(float(request.form.get('xlim1')), float(request.form.get('xlim2'))),
+            'min_y': min(float(request.form.get('ylim1')), float(request.form.get('ylim2'))),
+            'max_y': max(float(request.form.get('ylim1')), float(request.form.get('ylim2')))
+        }
+    except ValueError as e:
+        return jsonify({'status': 'error', 'message': f'Parâmetro numérico inválido: {str(e)}'}), 400
 
-        # Busca dados do MongoDB
-        try:
-            traj_collection = create_trajectory_collection_mongodb(query)
-            if len(traj_collection) == 0:
-                return jsonify({'status': 'error', 'message': 'Nenhuma trajetória encontrada'}), 404
-            
-            plot_trajectories_one_category_background(
-                traj_collection=traj_collection,
-                category=category,
-                background_image_path=temp_path,
-                **plot_params
-            )
-            
-            plt.savefig(buffer, format='png', bbox_inches='tight')
-            plt.close()
-            buffer.seek(0)
-            image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
-            return jsonify({
-                "status": "success",
-                "image": image_base64
-            })
+    try:
+        # Buscar trajetórias
+        traj_collection = create_trajectory_collection_mongodb(query)
         
-        except Exception as e:
-            return jsonify({'status': 'error', 'message': f'Erro ao gerar plot: {str(e)}'}), 500
+        if not traj_collection:
+            return jsonify({'status': 'error', 'message': 'Nenhuma trajetória encontrada para o período'}), 404
+
+        # Gerar plot com imagem do banco
+        plot_trajectories_one_category_background(
+            traj_collection,
+            category,
+            image_path,
+            **plot_params
+        )
+        
+        plt.savefig(buffer, format='png', bbox_inches='tight', dpi=300)
+        plt.close()
+        buffer.seek(0)
+        
+        return jsonify({
+            "status": "success",
+            "image": base64.b64encode(buffer.getvalue()).decode('utf-8')
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Erro no plot: {str(e)}")
+        return jsonify({'status': 'error', 'message': f'Erro ao gerar plot: {str(e)}'}), 500
 
 
 @app.route('/plot_with_limits', methods=['POST'])
@@ -597,106 +496,119 @@ def plot_one_category():
 def plot_with_limits():
     buffer = io.BytesIO()
     
-    # Validação do upload
-    if 'background_image' not in request.files:
-        return jsonify({'status': 'error', 'message': 'Imagem de fundo obrigatória'}), 400
+    # Obter nome da câmera
+    camera = request.form.get('camera')
+    if not camera:
+        return jsonify({'status': 'error', 'message': 'Nome da câmera obrigatório'}), 400
+
+    # Buscar imagem da câmera no banco de dados
+    camera_data = collection_cam.find_one({'name': camera})
+    if not camera_data:
+        return jsonify({'status': 'error', 'message': f'Câmera {camera} não encontrada'}), 404
+
+    image_path = camera_data.get('image_path')
+    if not image_path or not os.path.isfile(image_path):
+        return jsonify({'status': 'error', 'message': 'Imagem da câmera não disponível'}), 404
+
+    # Restante dos parâmetros
+    selectedDate = request.form.get('selected_date')
+    if not selectedDate:
+        return jsonify({'status': 'error', 'message': "Parâmetro 'selectedDate' obrigatório"}), 400
+
+    try:
+        datetime.strptime(selectedDate, '%Y-%m-%d')
+    except ValueError:
+        return jsonify({'status': 'error', 'message': 'Formato de data inválido'}), 400
+
+    category = request.form.get('category')
+    if not category:
+        return jsonify({'status': 'error', 'message': "Parâmetro 'categoria' obrigatório"}), 400
+
+    try:
+        category = request.form.get('category', type=int)
+    except ValueError:
+        return jsonify({'status': 'error', 'message': 'Categoria deve ser um número'}), 400
+     
+     # Validação WKT   
+    reference_line = wkt.loads(request.form.get('reference_line', ''))
+    if not reference_line:
+        return jsonify({'status': 'error', 'message': "Parâmetro 'reference_line' obrigatório"}), 400
     
-    background_file = request.files['background_image']
-    if background_file.filename == '':
-        return jsonify({'status': 'error', 'message': 'Arquivo inválido'}), 400
+    try:
+        reference_line = wkt.loads(request.form.get('reference_line', ''))
+    except (ShapelyError, TypeError) as e:
+        return jsonify({'status': 'error', 'message': f'Erro na geometria: {str(e)}'}), 400    
+    
+    # Construção da query
+    query = {}
+    
+    try:
+        startTime = float(request.form.get('start_time', 0))
+        endTime = float(request.form.get('end_time', 24))
+    except ValueError:
+        return jsonify({'status': 'error', 'message': 'Valores de tempo inválidos'}), 400
 
-    with tempfile.TemporaryDirectory() as temp_dir:
-        # Processamento da imagem
-        filename = secure_filename(background_file.filename)
-        temp_path = os.path.join(temp_dir, filename)
-        background_file.save(temp_path)  
-        
-        # Validação WKT
-        try:
-            reference_line = wkt.loads(request.form.get('reference_line', ''))
-        except (ShapelyError, TypeError) as e:
-            return jsonify({'status': 'error', 'message': f'Erro na geometria: {str(e)}'}), 400
-        
-        camera = request.form.get('camera', '')
-        category = request.form.get('category')
-        selectedDate = request.form.get('selected_date')
-        
-        try:
-            category = request.form.get('category', type=int)
-        except ValueError:
-            return jsonify({'status': 'error', 'message': 'Categoria deve ser um número'}), 400
-        
-        if not selectedDate:
-            return jsonify({'status': 'error', 'message': "Parâmetro 'selectedDate' obrigatório"}), 400
+    if category:
+        query["category"] = category
 
-        try:
-            datetime.strptime(selectedDate, '%Y-%m-%d')
-        except ValueError:
-            return jsonify({'status': 'error', 'message': 'Formato de data inválido'}), 400
+    if selectedDate:
+        hours_init = int(startTime)
+        minutes_init = int((startTime - hours_init) * 60)
+        hours_end = int(endTime)
+        minutes_end = int((endTime - hours_end) * 60)
+        query_date_start = f"{selectedDate}T{hours_init:02}:{minutes_init:02}:00"
+        query_date_end = f"{selectedDate}T{hours_end:02}:{minutes_end:02}:00"
+        query["start_time"] = {"$lte": query_date_end}
+        query["end_time"] = {"$gte": query_date_start}
         
-        startTime = request.form.get('start_time', type=float)
-        endTime = request.form.get('end_time', type=float)
-        
-        query = {}
-        
-        if selectedDate:
-            hours = int(startTime)
-            minutes = int((startTime - hours) * 60)
-            hours1 = int(endTime)
-            minutes1 = int((endTime - hours1) * 60)
-            query_date_start = f"{selectedDate}T{hours:02}:{minutes:02}:00"
-            query_date_end = f"{selectedDate}T{hours1:02}:{minutes1:02}:00"
-            query["start_time"] = {"$lte": query_date_end}
-            query["end_time"] = {"$gte": query_date_start}
+    if camera:
+        query["background"] = camera
 
-        if camera:
-            query["background"] = camera
-            
-        if category:
-            query["category"] = category
-            
-        try:
-            # Converte parâmetros numéricos
-            plot_params = {
-                'xsize': float(request.form.get('xsize', 10)),
-                'ysize': float(request.form.get('ysize', 10)),
-                'xlim1': float(request.form.get('xlim1', 0)),
-                'xlim2': float(request.form.get('xlim2', 100)),
-                'ylim1': float(request.form.get('ylim1', 0)),
-                'ylim2': float(request.form.get('ylim2', 100)),
-                'min_x': float(request.form.get('min_x', 0)),
-                'max_x': float(request.form.get('max_x', 100)),
-                'min_y': float(request.form.get('min_y', 0)),
-                'max_y': float(request.form.get('max_y', 100))
-            }
-        except ValueError as e:
-            return jsonify({'status': 'error', 'message': f'Parâmetro numérico inválido: {str(e)}'}), 400
+    # Parâmetros do plot
+    try:
+        plot_params = {
+            'xsize': float(request.form.get('xsize', 10)),
+            'ysize': float(request.form.get('ysize', 10)),
+            'xlim1': float(request.form.get('xlim1', 0)),
+            'xlim2': float(request.form.get('xlim2', 100)),
+            'ylim1': float(request.form.get('ylim1', 0)),
+            'ylim2': float(request.form.get('ylim2', 100)),
+	        'min_x': min(float(request.form.get('xlim1')), float(request.form.get('xlim2'))),
+            'max_x': max(float(request.form.get('xlim1')), float(request.form.get('xlim2'))),
+            'min_y': min(float(request.form.get('ylim1')), float(request.form.get('ylim2'))),
+            'max_y': max(float(request.form.get('ylim1')), float(request.form.get('ylim2')))
+        }
+    except ValueError as e:
+        return jsonify({'status': 'error', 'message': f'Parâmetro numérico inválido: {str(e)}'}), 400
+
+    try:
+        # Buscar trajetórias
+        traj_collection = create_trajectory_collection_mongodb(query)
         
-        # Busca dados do MongoDB
-        try:
-            traj_collection = create_trajectory_collection_mongodb(query)
-            if len(traj_collection) == 0:
-                return jsonify({'status': 'error', 'message': 'Nenhuma trajetória encontrada'}), 404
-            
-            plot_trajectories_with_limits(
-                traj_collection=traj_collection,
-                category=category,
-                background_image_path=temp_path,
-                reference_line=reference_line,
-                **plot_params
-            )
-            
-            plt.savefig(buffer, format='png', bbox_inches='tight')
-            plt.close()
-            buffer.seek(0)
-            image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
-            return jsonify({
-                "status": "success",
-                "image": image_base64
-            })
+        if not traj_collection:
+            return jsonify({'status': 'error', 'message': 'Nenhuma trajetória encontrada para o período'}), 404
+
+        # Gerar plot com imagem do banco
+        plot_trajectories_with_limits(
+            traj_collection,
+            category,
+            image_path,
+            reference_line,
+            **plot_params
+        )
         
-        except Exception as e:
-            return jsonify({'status': 'error', 'message': f'Erro ao gerar plot: {str(e)}'}), 500
+        plt.savefig(buffer, format='png', bbox_inches='tight', dpi=300)
+        plt.close()
+        buffer.seek(0)
+        
+        return jsonify({
+            "status": "success",
+            "image": base64.b64encode(buffer.getvalue()).decode('utf-8')
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Erro no plot: {str(e)}")
+        return jsonify({'status': 'error', 'message': f'Erro ao gerar plot: {str(e)}'}), 500
 
 
 @app.route('/plot_start_finish', methods=['POST'])
@@ -704,108 +616,122 @@ def plot_with_limits():
 def plot_with_start_finish():
     buffer = io.BytesIO()
     
-    # Validação do upload
-    if 'background_image' not in request.files:
-        return jsonify({'status': 'error', 'message': 'Imagem de fundo obrigatória'}), 400
-    
-    background_file = request.files['background_image']
-    if background_file.filename == '':
-        return jsonify({'status': 'error', 'message': 'Arquivo inválido'}), 400
-    
-    with tempfile.TemporaryDirectory() as temp_dir:
-        # Processamento da imagem
-        filename = secure_filename(background_file.filename)
-        temp_path = os.path.join(temp_dir, filename)
-        background_file.save(temp_path)  
-        
-        # Validação WKT
-        try:
-            arrival_line = wkt.loads(request.form.get('finish_line', ''))
-            departure_line = wkt.loads(request.form.get('departure_line', ''))
-        except (ShapelyError, TypeError) as e:
-            return jsonify({'status': 'error', 'message': f'Erro na geometria: {str(e)}'}), 400
-    
-        camera = request.form.get('camera', '')
-        category = request.form.get('category')
-        selectedDate = request.form.get('selected_date')
-        
-        try:
-            category = request.form.get('category', type=int)
-        except ValueError:
-            return jsonify({'status': 'error', 'message': 'Categoria deve ser um número'}), 400
-        
-        if not selectedDate:
-            return jsonify({'status': 'error', 'message': "Parâmetro 'selectedDate' obrigatório"}), 400
+    # Obter nome da câmera
+    camera = request.form.get('camera')
+    if not camera:
+        return jsonify({'status': 'error', 'message': 'Nome da câmera obrigatório'}), 400
 
-        try:
-            datetime.strptime(selectedDate, '%Y-%m-%d')
-        except ValueError:
-            return jsonify({'status': 'error', 'message': 'Formato de data inválido'}), 400
-        
-        startTime = request.form.get('start_time', type=float)
-        endTime = request.form.get('end_time', type=float)
-        
-        query = {}
-        
-        if selectedDate:
-            hours = int(startTime)
-            minutes = int((startTime - hours) * 60)
-            hours1 = int(endTime)
-            minutes1 = int((endTime - hours1) * 60)
-            query_date_start = f"{selectedDate}T{hours:02}:{minutes:02}:00"
-            query_date_end = f"{selectedDate}T{hours1:02}:{minutes1:02}:00"
-            query["start_time"] = {"$lte": query_date_end}
-            query["end_time"] = {"$gte": query_date_start}
+    # Buscar imagem da câmera no banco de dados
+    camera_data = collection_cam.find_one({'name': camera})
+    if not camera_data:
+        return jsonify({'status': 'error', 'message': f'Câmera {camera} não encontrada'}), 404
 
-        if camera:
-            query["background"] = camera
-            
-        if category:
-            query["category"] = category
-            
-        try:
-            # Converte parâmetros numéricos
-            plot_params = {
-                'xsize': float(request.form.get('xsize', 10)),
-                'ysize': float(request.form.get('ysize', 10)),
-                'xlim1': float(request.form.get('xlim1', 0)),
-                'xlim2': float(request.form.get('xlim2', 100)),
-                'ylim1': float(request.form.get('ylim1', 0)),
-                'ylim2': float(request.form.get('ylim2', 100)),
-                'min_x': float(request.form.get('min_x', 0)),
-                'max_x': float(request.form.get('max_x', 100)),
-                'min_y': float(request.form.get('min_y', 0)),
-                'max_y': float(request.form.get('max_y', 100))
-            }
-        except ValueError as e:
-            return jsonify({'status': 'error', 'message': f'Parâmetro numérico inválido: {str(e)}'}), 400
+    image_path = camera_data.get('image_path')
+    if not image_path or not os.path.isfile(image_path):
+        return jsonify({'status': 'error', 'message': 'Imagem da câmera não disponível'}), 404
+
+    # Restante dos parâmetros
+    selectedDate = request.form.get('selected_date')
+    if not selectedDate:
+        return jsonify({'status': 'error', 'message': "Parâmetro 'selectedDate' obrigatório"}), 400
+
+    try:
+        datetime.strptime(selectedDate, '%Y-%m-%d')
+    except ValueError:
+        return jsonify({'status': 'error', 'message': 'Formato de data inválido'}), 400
+
+    category = request.form.get('category')
+    if not category:
+        return jsonify({'status': 'error', 'message': "Parâmetro 'categoria' obrigatório"}), 400
+
+    try:
+        category = request.form.get('category', type=int)
+    except ValueError:
+        return jsonify({'status': 'error', 'message': 'Categoria deve ser um número'}), 400
+     
+     # Validação WKT   
+    arrival_line = wkt.loads(request.form.get('finish_line', ''))
+    departure_line = wkt.loads(request.form.get('departure_line', ''))
+    if not (arrival_line or departure_line):
+        return jsonify({'status': 'error', 'message': "Parâmetros WKT obrigatórios"}), 400
+    
+    try:
+        arrival_line = wkt.loads(request.form.get('finish_line', ''))
+        departure_line = wkt.loads(request.form.get('departure_line', ''))
+    except (ShapelyError, TypeError) as e:
+        return jsonify({'status': 'error', 'message': f'Erro na geometria: {str(e)}'}), 400 
+    
+    # Construção da query
+    query = {}
+    
+    try:
+        startTime = float(request.form.get('start_time', 0))
+        endTime = float(request.form.get('end_time', 24))
+    except ValueError:
+        return jsonify({'status': 'error', 'message': 'Valores de tempo inválidos'}), 400
+
+    if category:
+        query["category"] = category
+
+    if selectedDate:
+        hours_init = int(startTime)
+        minutes_init = int((startTime - hours_init) * 60)
+        hours_end = int(endTime)
+        minutes_end = int((endTime - hours_end) * 60)
+        query_date_start = f"{selectedDate}T{hours_init:02}:{minutes_init:02}:00"
+        query_date_end = f"{selectedDate}T{hours_end:02}:{minutes_end:02}:00"
+        query["start_time"] = {"$lte": query_date_end}
+        query["end_time"] = {"$gte": query_date_start}
         
-        # Busca dados do MongoDB
-        try:
-            traj_collection = create_trajectory_collection_mongodb(query)
-            if len(traj_collection) == 0:
-                return jsonify({'status': 'error', 'message': 'Nenhuma trajetória encontrada'}), 404
-            
-            plot_trajectories_with_start_finish(
-                traj_collection=traj_collection,
-                category=category,
-                background_image_path=temp_path,
-                arrival_line=arrival_line,
-                departure_line=departure_line,
-                **plot_params
-            )
-            
-            plt.savefig(buffer, format='png', bbox_inches='tight')
-            plt.close()
-            buffer.seek(0)
-            image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
-            return jsonify({
-                "status": "success",
-                "image": image_base64
-            })
+    if camera:
+        query["background"] = camera
+
+    # Parâmetros do plot
+    try:
+        plot_params = {
+            'xsize': float(request.form.get('xsize', 10)),
+            'ysize': float(request.form.get('ysize', 10)),
+            'xlim1': float(request.form.get('xlim1', 0)),
+            'xlim2': float(request.form.get('xlim2', 100)),
+            'ylim1': float(request.form.get('ylim1', 0)),
+            'ylim2': float(request.form.get('ylim2', 100)),
+	        'min_x': min(float(request.form.get('xlim1')), float(request.form.get('xlim2'))),
+            'max_x': max(float(request.form.get('xlim1')), float(request.form.get('xlim2'))),
+            'min_y': min(float(request.form.get('ylim1')), float(request.form.get('ylim2'))),
+            'max_y': max(float(request.form.get('ylim1')), float(request.form.get('ylim2')))
+        }
+    except ValueError as e:
+        return jsonify({'status': 'error', 'message': f'Parâmetro numérico inválido: {str(e)}'}), 400
+
+    try:
+        # Buscar trajetórias
+        traj_collection = create_trajectory_collection_mongodb(query)
         
-        except Exception as e:
-            return jsonify({'status': 'error', 'message': f'Erro ao gerar plot: {str(e)}'}), 500
+        if not traj_collection:
+            return jsonify({'status': 'error', 'message': 'Nenhuma trajetória encontrada para o período'}), 404
+
+        # Gerar plot com imagem do banco
+        plot_trajectories_with_start_finish(
+            traj_collection,
+            category,
+            image_path,
+            arrival_line,
+            departure_line,
+            **plot_params
+        )
+        
+        plt.savefig(buffer, format='png', bbox_inches='tight', dpi=300)
+        plt.close()
+        buffer.seek(0)
+        
+        return jsonify({
+            "status": "success",
+            "image": base64.b64encode(buffer.getvalue()).decode('utf-8')
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Erro no plot: {str(e)}")
+        return jsonify({'status': 'error', 'message': f'Erro ao gerar plot: {str(e)}'}), 500
 
 
 @app.route('/plot_with_stopped', methods=['POST'])
@@ -813,99 +739,242 @@ def plot_with_start_finish():
 def plot_with_stopped():
     buffer = io.BytesIO()
     
-    # Validação do upload
-    if 'background_image' not in request.files:
-        return jsonify({'status': 'error', 'message': 'Imagem de fundo obrigatória'}), 400
-    
-    background_file = request.files['background_image']
-    if background_file.filename == '':
-        return jsonify({'status': 'error', 'message': 'Arquivo inválido'}), 400
-    
-    with tempfile.TemporaryDirectory() as temp_dir:
-        # Processamento da imagem
-        filename = secure_filename(background_file.filename)
-        temp_path = os.path.join(temp_dir, filename)
-        background_file.save(temp_path)  
-    
-        camera = request.form.get('camera', '')
-        category = request.form.get('category')
-        selectedDate = request.form.get('selected_date')
-        
-        try:
-            category = request.form.get('category', type=int)
-        except ValueError:
-            return jsonify({'status': 'error', 'message': 'Categoria deve ser um número'}), 400
-        
-        if not selectedDate:
-            return jsonify({'status': 'error', 'message': "Parâmetro 'selectedDate' obrigatório"}), 400
+    # Obter nome da câmera
+    camera = request.form.get('camera')
+    if not camera:
+        return jsonify({'status': 'error', 'message': 'Nome da câmera obrigatório'}), 400
 
-        try:
-            datetime.strptime(selectedDate, '%Y-%m-%d')
-        except ValueError:
-            return jsonify({'status': 'error', 'message': 'Formato de data inválido'}), 400
-        
-        startTime = request.form.get('start_time', type=float)
-        endTime = request.form.get('end_time', type=float)
-        
-        query = {}
-        
-        if selectedDate:
-            hours = int(startTime)
-            minutes = int((startTime - hours) * 60)
-            hours1 = int(endTime)
-            minutes1 = int((endTime - hours1) * 60)
-            query_date_start = f"{selectedDate}T{hours:02}:{minutes:02}:00"
-            query_date_end = f"{selectedDate}T{hours1:02}:{minutes1:02}:00"
-            query["start_time"] = {"$lte": query_date_end}
-            query["end_time"] = {"$gte": query_date_start}
+    # Buscar imagem da câmera no banco de dados
+    camera_data = collection_cam.find_one({'name': camera})
+    if not camera_data:
+        return jsonify({'status': 'error', 'message': f'Câmera {camera} não encontrada'}), 404
 
-        if camera:
-            query["background"] = camera
-            
-        if category:
-            query["category"] = category
-            
-        try:
-            # Converte parâmetros numéricos
-            plot_params = {
-                'xsize': float(request.form.get('xsize', 10)),
-                'ysize': float(request.form.get('ysize', 10)),
-                'xlim1': float(request.form.get('xlim1', 0)),
-                'xlim2': float(request.form.get('xlim2', 100)),
-                'ylim1': float(request.form.get('ylim1', 0)),
-                'ylim2': float(request.form.get('ylim2', 100)),
-                'min_x': float(request.form.get('min_x', 0)),
-                'max_x': float(request.form.get('max_x', 100)),
-                'min_y': float(request.form.get('min_y', 0)),
-                'max_y': float(request.form.get('max_y', 100))
-            }
-        except ValueError as e:
-            return jsonify({'status': 'error', 'message': f'Parâmetro numérico inválido: {str(e)}'}), 400
+    image_path = camera_data.get('image_path')
+    if not image_path or not os.path.isfile(image_path):
+        return jsonify({'status': 'error', 'message': 'Imagem da câmera não disponível'}), 404
+
+    # Restante dos parâmetros
+    selectedDate = request.form.get('selected_date')
+    if not selectedDate:
+        return jsonify({'status': 'error', 'message': "Parâmetro 'selectedDate' obrigatório"}), 400
+
+    try:
+        datetime.strptime(selectedDate, '%Y-%m-%d')
+    except ValueError:
+        return jsonify({'status': 'error', 'message': 'Formato de data inválido'}), 400
+
+    category = request.form.get('category')
+    if not category:
+        return jsonify({'status': 'error', 'message': "Parâmetro 'categoria' obrigatório"}), 400
+
+    try:
+        category = request.form.get('category', type=int)
+    except ValueError:
+        return jsonify({'status': 'error', 'message': 'Categoria deve ser um número'}), 400
+    
+    try:
+        stop_threshold = request.form.get('stop_threshold', type=int)
+        min_duration = request.form.get('min_duration', type=int)
+        noise_tolerance = request.form.get('noise_tolerance', type=int)
+    except ValueError:
+        return jsonify({'status': 'error', 'message': 'Parâmetros para identificação de paradas inválidos'}), 400
+    
+    # Construção da query
+    query = {}
+    
+    try:
+        startTime = float(request.form.get('start_time', 0))
+        endTime = float(request.form.get('end_time', 24))
+    except ValueError:
+        return jsonify({'status': 'error', 'message': 'Valores de tempo inválidos'}), 400
+
+    if category:
+        query["category"] = category
+
+    if selectedDate:
+        hours_init = int(startTime)
+        minutes_init = int((startTime - hours_init) * 60)
+        hours_end = int(endTime)
+        minutes_end = int((endTime - hours_end) * 60)
+        query_date_start = f"{selectedDate}T{hours_init:02}:{minutes_init:02}:00"
+        query_date_end = f"{selectedDate}T{hours_end:02}:{minutes_end:02}:00"
+        query["start_time"] = {"$lte": query_date_end}
+        query["end_time"] = {"$gte": query_date_start}
         
-        # Busca dados do MongoDB
-        try:
-            traj_collection = create_trajectory_collection_mongodb(query)
-            if len(traj_collection) == 0:
-                return jsonify({'status': 'error', 'message': 'Nenhuma trajetória encontrada'}), 404
-            
-            plot_trajectories_with_stopped(
-                traj_collection=traj_collection,
-                category=category,
-                background_image_path=temp_path,
-                **plot_params
-            )
-            
-            plt.savefig(buffer, format='png', bbox_inches='tight')
-            plt.close()
-            buffer.seek(0)
-            image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
-            return jsonify({
-                "status": "success",
-                "image": image_base64
-            })
+    if camera:
+        query["background"] = camera
+
+    # Parâmetros do plot
+    try:
+        plot_params = {
+            'xsize': float(request.form.get('xsize', 10)),
+            'ysize': float(request.form.get('ysize', 10)),
+            'xlim1': float(request.form.get('xlim1', 0)),
+            'xlim2': float(request.form.get('xlim2', 100)),
+            'ylim1': float(request.form.get('ylim1', 0)),
+            'ylim2': float(request.form.get('ylim2', 100)),
+	        'min_x': min(float(request.form.get('xlim1')), float(request.form.get('xlim2'))),
+            'max_x': max(float(request.form.get('xlim1')), float(request.form.get('xlim2'))),
+            'min_y': min(float(request.form.get('ylim1')), float(request.form.get('ylim2'))),
+            'max_y': max(float(request.form.get('ylim1')), float(request.form.get('ylim2')))
+        }
+    except ValueError as e:
+        return jsonify({'status': 'error', 'message': f'Parâmetro numérico inválido: {str(e)}'}), 400
+
+    try:
+        # Buscar trajetórias
+        traj_collection = create_trajectory_collection_mongodb(query)
         
-        except Exception as e:
-            return jsonify({'status': 'error', 'message': f'Erro ao gerar plot: {str(e)}'}), 500
+        if not traj_collection:
+            return jsonify({'status': 'error', 'message': 'Nenhuma trajetória encontrada para o período'}), 404
+
+        # Gerar plot com imagem do banco
+        plot_trajectories_with_stopped(
+            traj_collection,
+            category,
+            image_path,
+            **plot_params,
+            stop_threshold=stop_threshold,
+            min_duration=min_duration,
+            noise_tolerance=noise_tolerance
+        )
+        
+        plt.savefig(buffer, format='png', bbox_inches='tight', dpi=300)
+        plt.close()
+        buffer.seek(0)
+        
+        return jsonify({
+            "status": "success",
+            "image": base64.b64encode(buffer.getvalue()).decode('utf-8')
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Erro no plot: {str(e)}")
+        return jsonify({'status': 'error', 'message': f'Erro ao gerar plot: {str(e)}'}), 500
+
+
+@app.route('/plot_with_stop_rec', methods=['POST'])
+@handle_plot_errors
+def plot_with_stop_in_rectangle():
+    buffer = io.BytesIO()
+    
+    # Obter nome da câmera
+    camera = request.form.get('camera')
+    if not camera:
+        return jsonify({'status': 'error', 'message': 'Nome da câmera obrigatório'}), 400
+
+    # Buscar imagem da câmera no banco de dados
+    camera_data = collection_cam.find_one({'name': camera})
+    if not camera_data:
+        return jsonify({'status': 'error', 'message': f'Câmera {camera} não encontrada'}), 404
+
+    image_path = camera_data.get('image_path')
+    if not image_path or not os.path.isfile(image_path):
+        return jsonify({'status': 'error', 'message': 'Imagem da câmera não disponível'}), 404
+
+    # Restante dos parâmetros
+    selectedDate = request.form.get('selected_date')
+    if not selectedDate:
+        return jsonify({'status': 'error', 'message': "Parâmetro 'selectedDate' obrigatório"}), 400
+
+    try:
+        datetime.strptime(selectedDate, '%Y-%m-%d')
+    except ValueError:
+        return jsonify({'status': 'error', 'message': 'Formato de data inválido'}), 400
+
+    category = request.form.get('category')
+    if not category:
+        return jsonify({'status': 'error', 'message': "Parâmetro 'categoria' obrigatório"}), 400
+
+    try:
+        category = request.form.get('category', type=int)
+    except ValueError:
+        return jsonify({'status': 'error', 'message': 'Categoria deve ser um número'}), 400
+    
+    try:
+        stop_threshold = request.form.get('stop_threshold', type=int)
+        min_duration = request.form.get('min_duration', type=int)
+        noise_tolerance = request.form.get('noise_tolerance', type=int)
+    except ValueError:
+        return jsonify({'status': 'error', 'message': 'Parâmetros para identificação de paradas inválidos'}), 400
+        
+    # Construção da query
+    query = {}
+    
+    try:
+        startTime = float(request.form.get('start_time', 0))
+        endTime = float(request.form.get('end_time', 24))
+    except ValueError:
+        return jsonify({'status': 'error', 'message': 'Valores de tempo inválidos'}), 400
+
+    if category:
+        query["category"] = category
+
+    if selectedDate:
+        hours_init = int(startTime)
+        minutes_init = int((startTime - hours_init) * 60)
+        hours_end = int(endTime)
+        minutes_end = int((endTime - hours_end) * 60)
+        query_date_start = f"{selectedDate}T{hours_init:02}:{minutes_init:02}:00"
+        query_date_end = f"{selectedDate}T{hours_end:02}:{minutes_end:02}:00"
+        query["start_time"] = {"$lte": query_date_end}
+        query["end_time"] = {"$gte": query_date_start}
+        
+    if camera:
+        query["background"] = camera
+
+    # Parâmetros do plot
+    try:
+        plot_params = {
+            'xsize': float(request.form.get('xsize', 10)),
+            'ysize': float(request.form.get('ysize', 10)),
+            'xlim1': float(request.form.get('xlim1', 0)),
+            'xlim2': float(request.form.get('xlim2', 100)),
+            'ylim1': float(request.form.get('ylim1', 0)),
+            'ylim2': float(request.form.get('ylim2', 100)),
+	        'min_x': min(float(request.form.get('xlim1')), float(request.form.get('xlim2'))),
+            'max_x': max(float(request.form.get('xlim1')), float(request.form.get('xlim2'))),
+            'min_y': min(float(request.form.get('ylim1')), float(request.form.get('ylim2'))),
+            'max_y': max(float(request.form.get('ylim1')), float(request.form.get('ylim2'))),
+            'rect_min_x': float(request.form.get('rect_min_x', 0)),
+            'rect_max_x': float(request.form.get('rect_max_x', 100)),
+            'rect_min_y': float(request.form.get('rect_min_y', 0)),
+            'rect_max_y': float(request.form.get('rect_max_y', 100))
+        }
+    except ValueError as e:
+        return jsonify({'status': 'error', 'message': f'Parâmetro numérico inválido: {str(e)}'}), 400
+
+    try:
+        # Buscar trajetórias
+        traj_collection = create_trajectory_collection_mongodb(query)
+        
+        if not traj_collection:
+            return jsonify({'status': 'error', 'message': 'Nenhuma trajetória encontrada para o período'}), 404
+
+        # Gerar plot com imagem do banco
+        plot_trajectories_with_stop_in_rectangle(
+            traj_collection,
+            category,
+            image_path,
+            **plot_params,
+            stop_threshold=stop_threshold,
+            min_duration=min_duration,
+            noise_tolerance=noise_tolerance
+        )
+        
+        plt.savefig(buffer, format='png', bbox_inches='tight', dpi=300)
+        plt.close()
+        buffer.seek(0)
+        
+        return jsonify({
+            "status": "success",
+            "image": base64.b64encode(buffer.getvalue()).decode('utf-8')
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Erro no plot: {str(e)}")
+        return jsonify({'status': 'error', 'message': f'Erro ao gerar plot: {str(e)}'}), 500
+
 
 if __name__ == "__main__":
     app.run(debug=True)

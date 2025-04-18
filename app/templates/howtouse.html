@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Trajectories - Conversor</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+    </head>
+
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('home') }}">Smart Trajectories</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('home') }}">Início</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('camera') }}">Cadastro de Câmera</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('converter') }}">Conversor de Trajetórias</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="{{ url_for('howtouse') }}">Como Usar</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="main-card p-4 mt-5">
+        <div>
+            <h2 class="mb-4">Cadastramento de Câmera</h2>
+            <p> Na aba "Cadastro de Câmera", presente na barra de navegação, anexe um arquivo (tipo JPG/PNG)
+                e informe um nome que estará associado a ela. Sua câmera será salva no banco de dados, o que
+                permitirá que você realize conversões de arquivos.
+            </p>
+        </div>
+
+        <div>
+            <h2 class="mb-4 mt-5">Conversão de Arquivo TXT em Trajetórias</h2>
+            <p> Na aba "Conversor de Trajetórias", presente na barra de navegação, anexe um arquivo (tipo TXT)
+                e informe o nome da câmera que estará associado a ele. Os dados contidos no arquivo txt serão 
+                processados e convertidos em coleções de trajetórias e, em seguida, salvos no banco de dados. 
+                Isso permitirá que você consiga visualizar as trajetórias que estão relacionadas a sua câmera.
+            </p>
+        </div>
+
+        <div>
+            <h2 class="mb-4 mt-5">Visualização de Trajetórias de uma Câmera</h2>
+            <p> Na aba "Início", presente na barra de navegação, é possível visualizar trajetórias de uma câmera 
+                específica. Para tal, é necessário selecionar um tipo de visualização, informar o nome da câmera
+                que deseja visualizar as trajetórias, juntamente com a data em que os trajetos (dados) foram 
+                registrados. Além disso, é preciso informar o intervalo de tempo, do dia em questão, que você deseja
+                analisar, além de informar, também, parâmetros para a visualização da imagem. Valores de Altura e Largura
+                determinam as dimensões que a imagem será apresentada na tela (em centímetros). Valores de Latitude e
+                Longitude são manipuláveis, para que o usuário enquadre da maneira que preferir ou achar mais correta o 
+                posicionamento das trajetórias na imagem. Ademais, esses valores são interpretados como um plano 
+                cartesiano, que será visualizado na imagem gerada. 
+            </p>
+            <p> Existem 6 tipos de visualizações possíveis, denominadas "Plot's", sendo elas:
+                <ul>
+                    <li><b>Plot Básico</b></li>
+                        <p class="p-2"> Apresenta todas as trajetórias de todos objetos que estejam presentes na data e 
+                            intervalo de tempo informados.
+                        </p>
+                    <li><b>Plot de Categória Específica</b></li>
+                    <p class="p-2"> Apresenta todas as trajetórias de um objeto específico. Esse tipo de plot requer a informação 
+                        de um campo específico, sendo ele denomidado "categoria", que consiste num número que representa um objeto.
+                    </p>
+                    <li><b>Plot com Limite de Referência</b></li>
+                    <p class="p-2"> Permite que seja visualizado, para uma categoria específica, se um objeto ultrapassou uma
+                        linha de referência (local) informada pelo usuário. O tipo de entrada deve possuir a seguinte 
+                        característica: LINESTRING(x_inicial y_inicial, x_final y_final), onde x_inicial, y_inicial x_final e 
+                        y_final são pontos que devem estar contidos no plano cartesiano da imagem (Latitude e Longitude).
+                    </p>
+                    <li><b>Plot com Partida/Chegada</b></li>
+                    <p class="p-2"> Permite que seja visualizado, para uma categoria específica, se um objeto ultrapassou duas
+                        linhas de referência (locais), podendo ser consideradas como uma linha de chegada e uma linha de partida, 
+                        que devem ser informadas pelo usuário. O tipo de entrada e a lógica por trás são as mesmas que as
+                        apresentadas a respeito do Plot com Limite de Referência.
+                    </p>
+                    <li><b>Plot para Identificar Objetos Parados</b></li>
+                    <p class="p-2"> Permite que seja visualizado, para uma categoria específica, se um objeto apresentou uma 
+                        característica de parada no decorrer do seu percurso. Parâmetros adicionais devem ser informados para esse 
+                        tipo, sendo eles: Distância limite - representa a quantidade de pixels que o objeto pode ter apresentado 
+                        algum movimento <br>
+                        1. Distância limite - quantidade de pixels que um objeto pode ter movido-se, mas que ainda pode ser 
+                        considerado em estado de parada; <br>
+                        2. Tempo limite - tempo considerado para um objeto apresentar a característica de estar parado; <br>
+                        3. Tolerância - margem de erro (possível ruído) de movimento para considerar que um objeto está parado.
+                    </p>
+                    <li><b>Plot para Identificar Objetos Parados em uma Área</b></li>
+                    <p class="p-2"> Permite que seja visualizado, para uma categoria específica, se um objeto apresentou uma 
+                        característica de parada em uma certa área retangular informada pelo usuário. Os parâmetros presentes
+                        no Plot para Identificar Objetos Parados também aparecem aqui, possuindo a mesma lógica. Há apenas o 
+                        acréscimo de mais 4 parâmetros (Base Inicial, Base Final, Altura Inicial, Altura Final), os quais 
+                        determinarão o tamanho e em que posição do plano cartesiano, da imagem gerada, a área retangular estará 
+                        posicionada. 
+                    </p>
+                </ul>
+            </p>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="static/js/convert.js"></script>
+</body>
+</html>
