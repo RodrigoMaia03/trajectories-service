@@ -1,12 +1,10 @@
-from flask import render_template, request, send_file, redirect, url_for, jsonify, current_app
+from flask import render_template, request, send_file, jsonify, current_app
 from werkzeug.utils import secure_filename
 import os
 import io
 import json
 import matplotlib
-import tempfile
 import base64
-matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from app import create_app
 from pymongo import MongoClient
@@ -19,10 +17,12 @@ from app.utils import JSONEncoder, create_trajectory_collection_mongodb, allowed
 from smart_traject.smart_trajectories.convert import txt_to_csv, txt_to_csv_datetime
 from smart_traject.smart_trajectories.processing import generate_trajectory_collection
 from smart_traject.smart_trajectories.plot import plot_trajectories_with_background, plot_trajectories_one_category_background, plot_trajectories_with_stop_in_rectangle
-from smart_traject.smart_trajectories.plot import plot_trajectories_with_limits, plot_trajectories_with_start_finish, plot_trajectories_with_stopped
+from smart_traject.smart_trajectories.plot import plot_trajectories_with_limits, plot_trajectories_with_start_finish, plot_trajectories_with_stopped, plot_trajectories_in_monitored_area
 from config import INPUT_DATA_DIR, INPUT_DATA_DIR2, OUTPUT_DATA_DIR, OUTPUT_DATA_DIR2, MONGODB_URI, DB_NAME, COLLECTION_TRAJ, COLLECTION_CAM
 
+matplotlib.use('Agg')
 
+# Decorador para tratamento de erros nas rotas Flask
 def handle_plot_errors(f):
     @wraps(f)
     def decorator(*args, **kwargs):
@@ -362,7 +362,7 @@ def plot_with_background():
             return jsonify({'status': 'error', 'message': 'Nenhuma trajetória encontrada para o período'}), 404
 
         # Gerar plot com imagem do banco
-        plot_trajectories_with_background(
+        result = plot_trajectories_with_background(
             traj_collection,
             image_path,
             **plot_params
@@ -374,12 +374,15 @@ def plot_with_background():
         
         return jsonify({
             "status": "success",
-            "image": base64.b64encode(buffer.getvalue()).decode('utf-8')
+            "image": base64.b64encode(buffer.getvalue()).decode('utf-8'),
+            "metrics": {
+                "summary": result
+            }
         })
 
     except Exception as e:
         current_app.logger.error(f"Erro no plot: {str(e)}")
-        return jsonify({'status': 'error', 'message': f'Erro ao gerar plot: {str(e)}'}), 500
+        return jsonify({'status': 'error', 'message': f'Erro ao gerar plot: {str(e)}', 'metrics': None}), 500
 
 
 @app.route('/plot_one_category', methods=['POST'])
@@ -470,7 +473,7 @@ def plot_one_category():
             return jsonify({'status': 'error', 'message': 'Nenhuma trajetória encontrada para o período'}), 404
 
         # Gerar plot com imagem do banco
-        plot_trajectories_one_category_background(
+        result = plot_trajectories_one_category_background(
             traj_collection,
             category,
             image_path,
@@ -483,12 +486,15 @@ def plot_one_category():
         
         return jsonify({
             "status": "success",
-            "image": base64.b64encode(buffer.getvalue()).decode('utf-8')
+            "image": base64.b64encode(buffer.getvalue()).decode('utf-8'),
+            "metrics": {
+                "summary": result
+            }
         })
 
     except Exception as e:
         current_app.logger.error(f"Erro no plot: {str(e)}")
-        return jsonify({'status': 'error', 'message': f'Erro ao gerar plot: {str(e)}'}), 500
+        return jsonify({'status': 'error', 'message': f'Erro ao gerar plot: {str(e)}', 'metrics': None}), 500
 
 
 @app.route('/plot_with_limits', methods=['POST'])
@@ -589,7 +595,7 @@ def plot_with_limits():
             return jsonify({'status': 'error', 'message': 'Nenhuma trajetória encontrada para o período'}), 404
 
         # Gerar plot com imagem do banco
-        plot_trajectories_with_limits(
+        result = plot_trajectories_with_limits(
             traj_collection,
             category,
             image_path,
@@ -603,12 +609,15 @@ def plot_with_limits():
         
         return jsonify({
             "status": "success",
-            "image": base64.b64encode(buffer.getvalue()).decode('utf-8')
+            "image": base64.b64encode(buffer.getvalue()).decode('utf-8'),
+            "metrics": {
+                "summary": result
+            }
         })
 
     except Exception as e:
         current_app.logger.error(f"Erro no plot: {str(e)}")
-        return jsonify({'status': 'error', 'message': f'Erro ao gerar plot: {str(e)}'}), 500
+        return jsonify({'status': 'error', 'message': f'Erro ao gerar plot: {str(e)}', 'metrics': None}), 500
 
 
 @app.route('/plot_start_finish', methods=['POST'])
@@ -711,7 +720,7 @@ def plot_with_start_finish():
             return jsonify({'status': 'error', 'message': 'Nenhuma trajetória encontrada para o período'}), 404
 
         # Gerar plot com imagem do banco
-        plot_trajectories_with_start_finish(
+        result = plot_trajectories_with_start_finish(
             traj_collection,
             category,
             image_path,
@@ -726,12 +735,15 @@ def plot_with_start_finish():
         
         return jsonify({
             "status": "success",
-            "image": base64.b64encode(buffer.getvalue()).decode('utf-8')
+            "image": base64.b64encode(buffer.getvalue()).decode('utf-8'),
+            "metrics": {
+                "summary": result
+            }
         })
 
     except Exception as e:
         current_app.logger.error(f"Erro no plot: {str(e)}")
-        return jsonify({'status': 'error', 'message': f'Erro ao gerar plot: {str(e)}'}), 500
+        return jsonify({'status': 'error', 'message': f'Erro ao gerar plot: {str(e)}', 'metrics': None}), 500
 
 
 @app.route('/plot_with_stopped', methods=['POST'])
@@ -829,7 +841,7 @@ def plot_with_stopped():
             return jsonify({'status': 'error', 'message': 'Nenhuma trajetória encontrada para o período'}), 404
 
         # Gerar plot com imagem do banco
-        plot_trajectories_with_stopped(
+        result = plot_trajectories_with_stopped(
             traj_collection,
             category,
             image_path,
@@ -845,12 +857,15 @@ def plot_with_stopped():
         
         return jsonify({
             "status": "success",
-            "image": base64.b64encode(buffer.getvalue()).decode('utf-8')
+            "image": base64.b64encode(buffer.getvalue()).decode('utf-8'),
+            "metrics": {
+                "summary": result
+            }
         })
 
     except Exception as e:
         current_app.logger.error(f"Erro no plot: {str(e)}")
-        return jsonify({'status': 'error', 'message': f'Erro ao gerar plot: {str(e)}'}), 500
+        return jsonify({'status': 'error', 'message': f'Erro ao gerar plot: {str(e)}', 'metrics': None}), 500
 
 
 @app.route('/plot_with_stop_rec', methods=['POST'])
@@ -952,7 +967,7 @@ def plot_with_stop_in_rectangle():
             return jsonify({'status': 'error', 'message': 'Nenhuma trajetória encontrada para o período'}), 404
 
         # Gerar plot com imagem do banco
-        plot_trajectories_with_stop_in_rectangle(
+        result = plot_trajectories_with_stop_in_rectangle(
             traj_collection,
             category,
             image_path,
@@ -968,12 +983,130 @@ def plot_with_stop_in_rectangle():
         
         return jsonify({
             "status": "success",
-            "image": base64.b64encode(buffer.getvalue()).decode('utf-8')
+            "image": base64.b64encode(buffer.getvalue()).decode('utf-8'),
+            "metrics": {
+                "summary": result
+            }
         })
 
     except Exception as e:
         current_app.logger.error(f"Erro no plot: {str(e)}")
-        return jsonify({'status': 'error', 'message': f'Erro ao gerar plot: {str(e)}'}), 500
+        return jsonify({'status': 'error', 'message': f'Erro ao gerar plot: {str(e)}', 'metrics': None}), 500
+
+@app.route('/plot_monitored_area', methods=['POST'])
+@handle_plot_errors
+def plot_in_monitored_area():
+    buffer = io.BytesIO()
+    
+    # Obter nome da câmera
+    camera = request.form.get('camera')
+    if not camera:
+        return jsonify({'status': 'error', 'message': 'Nome da câmera obrigatório'}), 400
+
+    # Buscar imagem da câmera no banco de dados
+    camera_data = collection_cam.find_one({'name': camera})
+    if not camera_data:
+        return jsonify({'status': 'error', 'message': f'Câmera {camera} não encontrada'}), 404
+
+    image_path = camera_data.get('image_path')
+    if not image_path or not os.path.isfile(image_path):
+        return jsonify({'status': 'error', 'message': 'Imagem da câmera não disponível'}), 404
+
+    # Restante dos parâmetros
+    selectedDate = request.form.get('selected_date')
+    if not selectedDate:
+        return jsonify({'status': 'error', 'message': "Parâmetro 'selectedDate' obrigatório"}), 400
+
+    try:
+        datetime.strptime(selectedDate, '%Y-%m-%d')
+    except ValueError:
+        return jsonify({'status': 'error', 'message': 'Formato de data inválido'}), 400
+
+    category = request.form.get('category')
+    if not category:
+        return jsonify({'status': 'error', 'message': "Parâmetro 'categoria' obrigatório"}), 400
+
+    try:
+        category = request.form.get('category', type=int)
+    except ValueError:
+        return jsonify({'status': 'error', 'message': 'Categoria deve ser um número'}), 400
+        
+    # Construção da query
+    query = {}
+    
+    try:
+        startTime = float(request.form.get('start_time', 0))
+        endTime = float(request.form.get('end_time', 24))
+    except ValueError:
+        return jsonify({'status': 'error', 'message': 'Valores de tempo inválidos'}), 400
+
+    if category:
+        query["category"] = category
+
+    if selectedDate:
+        hours_init = int(startTime)
+        minutes_init = int((startTime - hours_init) * 60)
+        hours_end = int(endTime)
+        minutes_end = int((endTime - hours_end) * 60)
+        query_date_start = f"{selectedDate}T{hours_init:02}:{minutes_init:02}:00"
+        query_date_end = f"{selectedDate}T{hours_end:02}:{minutes_end:02}:00"
+        query["start_time"] = {"$lte": query_date_end}
+        query["end_time"] = {"$gte": query_date_start}
+        
+    if camera:
+        query["background"] = camera
+
+    # Parâmetros do plot
+    try:
+        plot_params = {
+            'xsize': float(request.form.get('xsize', 10)),
+            'ysize': float(request.form.get('ysize', 10)),
+            'xlim1': float(request.form.get('xlim1', 0)),
+            'xlim2': float(request.form.get('xlim2', 100)),
+            'ylim1': float(request.form.get('ylim1', 0)),
+            'ylim2': float(request.form.get('ylim2', 100)),
+	        'min_x': min(float(request.form.get('xlim1')), float(request.form.get('xlim2'))),
+            'max_x': max(float(request.form.get('xlim1')), float(request.form.get('xlim2'))),
+            'min_y': min(float(request.form.get('ylim1')), float(request.form.get('ylim2'))),
+            'max_y': max(float(request.form.get('ylim1')), float(request.form.get('ylim2'))),
+            'rect_min_x': float(request.form.get('rect_min_x', 0)),
+            'rect_max_x': float(request.form.get('rect_max_x', 100)),
+            'rect_min_y': float(request.form.get('rect_min_y', 0)),
+            'rect_max_y': float(request.form.get('rect_max_y', 100))
+        }
+    except ValueError as e:
+        return jsonify({'status': 'error', 'message': f'Parâmetro numérico inválido: {str(e)}'}), 400
+
+    try:
+        # Buscar trajetórias
+        traj_collection = create_trajectory_collection_mongodb(query)
+        
+        if not traj_collection:
+            return jsonify({'status': 'error', 'message': 'Nenhuma trajetória encontrada para o período'}), 404
+
+        # Gerar plot com imagem do banco
+        result = plot_trajectories_in_monitored_area(
+            traj_collection,
+            category,
+            image_path,
+            **plot_params
+        )
+        
+        plt.savefig(buffer, format='png', bbox_inches='tight', dpi=300)
+        plt.close()
+        buffer.seek(0)
+        
+        return jsonify({
+            "status": "success",
+            "image": base64.b64encode(buffer.getvalue()).decode('utf-8'),
+            "metrics": {
+                "summary": result
+            }
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Erro no plot: {str(e)}")
+        return jsonify({'status': 'error', 'message': f'Erro ao gerar plot: {str(e)}', 'metrics': None}), 500
 
 
 if __name__ == "__main__":

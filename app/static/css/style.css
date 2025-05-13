@@ -90,6 +90,15 @@ h2 {
     opacity: 0.8;
 }
 
+.btn-secondary {
+    background-color: #17a2b8;
+    border-color: #17a2b8;
+}
+.btn-secondary:hover {
+    background-color: #138496;
+    border-color: #117a8b;
+}
+
 .navbar {
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
@@ -118,3 +127,27 @@ h2 {
     height: auto;
     object-fit: contain; 
 }
+
+.metric-section {
+    background: white;
+    border-radius: 8px;
+    padding: 1rem;
+    box-shadow: 0 0 10px rgba(0,0,0,0.05);
+}
+
+.metric-group {
+    margin-bottom: 1.5rem;
+}
+
+.metric-group h5 {
+    color: #2e59a9;
+    border-bottom: 2px solid #eee;
+    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.chart-container {
+    height: 200px;
+    margin-top: 1rem;
+}
+
