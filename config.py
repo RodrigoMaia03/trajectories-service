@@ -6,7 +6,7 @@ TESTING = False
 # SECRET_KEY = os.getenv('SECRET_KEY', 'your-secret-key-here')
 
 # Configurações do MongoDB
-MONGODB_URI = "mongodb://localhost:27017/"
+MONGODB_URI = os.getenv("MONGO_URI", "mongodb://mongo_db:27017/")
 DB_NAME = "smart-trajectories"
 COLLECTION_TRAJ = "trajectories"
 COLLECTION_CAM = "cameras"

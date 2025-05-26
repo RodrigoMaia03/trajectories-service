@@ -1,0 +1,26 @@
+services:
+  trajectoriesservice:
+    image: trajectoriesservice
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    ports:
+      - "5002:5002"
+    environment:
+      - MONGO_URI=mongodb://mongo_db:27017/
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - mongo_db 
+
+  mongo_db:
+    image: mongo:latest 
+    restart: always     
+    ports:
+      - "27017:27017" 
+
+    volumes:
+      - mongo-data:/data/db 
+
+volumes:
+  mongo-data:

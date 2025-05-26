@@ -87,12 +87,13 @@ function generateBgPlot() {
     const spinner = button.querySelector('.spinner-border');
     const buttonText = button.querySelector('.upload-text');
     const imgElement = document.getElementById('bgPlotImage');
+    const metricsContainer = document.getElementById('metricsContainer');
 
     button.disabled = true;
     spinner.style.display = 'inline-block';
     buttonText.textContent = 'Processando...';
     imgElement.style.display = 'none';
-    document.getElementById('metricsContainer').style.display = 'none';
+    metricsContainer.style.display = 'none';
 
     try {
         const formData = new FormData();
@@ -240,13 +241,10 @@ function generateBgPlot() {
                 // Define as dimensões da imagem
                 imgElement.style.width = `${widthCm * 37.8}px`;
                 imgElement.style.height = `${heightCm * 37.8}px`;
-
-                console.log('Parâmetros enviados:', Array.from(formData.entries()));
                 imgElement.src = `data:image/png;base64,${data.image}`;
                 imgElement.style.display = 'block';
 
                 // Atualiza seção de métricas
-                const metricsContainer = document.getElementById('metricsContainer');
                 metricsContainer.innerHTML = `
                     <div class="metric-section">
                         <h4>Métricas Analíticas</h4>
@@ -284,13 +282,15 @@ function generateMetricsOnly() {
     const button = document.querySelector('button[onclick="generateMetricsOnly()"]');
     const spinner = button.querySelector('.spinner-border');
     const buttonText = button.querySelector('.upload-text');
+    const imgElement = document.getElementById('bgPlotImage');
     const metricsContainer = document.getElementById('metricsContainer');
 
     button.disabled = true;
     spinner.style.display = 'inline-block';
     buttonText.textContent = 'Calculando...';
+    imgElement.style.display = 'none';
     metricsContainer.style.display = 'none';
-
+    
     try {
         const formData = new FormData();
         const plotType = document.getElementById('plotBackgroundType').value;
