@@ -47,12 +47,6 @@ function handleFile(file) {
             Tamanho: ${(file.size / 1024).toFixed(2)} KB
         </div>
     `;
-
-    // Adiciona ao histórico
-    const historyItem = document.createElement('div');
-    historyItem.className = 'alert alert-light mb-2';
-    historyItem.textContent = `✉️ ${file.name} - ${new Date().toLocaleTimeString()}`;
-    document.getElementById('conversionHistory').prepend(historyItem);
 }
 
 // Envio do formulário
@@ -88,19 +82,11 @@ form.addEventListener('submit', async (e) => {
         }
         
         // Processamento do sucesso
-        const blob = await response.blob();
-        const downloadUrl = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = downloadUrl;
-        a.download = file.name.replace('.txt', '_converted.json');
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(downloadUrl);
-        
-        // Atualização da interface
-        document.getElementById('filePreview').innerHTML += `
+        const resposeJson = await response.json();
+
+        document.getElementById('filePreview').innerHTML = `
             <div class="alert alert-success mt-3">
-                Conversão concluída com sucesso!
+                ${resposeJson.message}
             </div>
         `;
     } catch (error) {
@@ -110,7 +96,7 @@ form.addEventListener('submit', async (e) => {
             `${error.message}<br><a href="/cam" class="alert-link">Cadastrar câmera</a>` : 
             error.message;
 
-        document.getElementById('filePreview').innerHTML += `
+        document.getElementById('filePreview').innerHTML = `
             <div class="alert alert-danger mt-3">
                 ${errorMessage}
             </div>
@@ -123,5 +109,11 @@ form.addEventListener('submit', async (e) => {
         progressBar.style.display = 'none';
         progressFill.style.width = '0%';
         form.reset();
+
+        // Adiciona ao histórico
+        const historyItem = document.createElement('div');
+        historyItem.className = 'alert alert-light mb-2';
+        historyItem.textContent = `✉️ ${file.name} - ${new Date().toLocaleTimeString()}`;
+        document.getElementById('conversionHistory').prepend(historyItem);
     }
 });

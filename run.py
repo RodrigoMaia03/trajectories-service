@@ -1,4 +1,4 @@
-from flask import render_template, request, send_file, jsonify, current_app
+from flask import render_template, request, jsonify, current_app
 from werkzeug.utils import secure_filename
 import os
 import io
@@ -9,11 +9,11 @@ import matplotlib.pyplot as plt
 from app import create_app
 from pymongo import MongoClient
 from shapely import wkt
-from datetime import datetime
+from datetime import datetime, timezone
 from shapely.errors import ShapelyError
 from functools import wraps
 from flask.json.provider import DefaultJSONProvider
-from app.utils import JSONEncoder, create_trajectory_collection_mongodb, allowed_file
+from app.utils import CustomJSONEncoder, create_trajectory_collection_mongodb, allowed_file
 from smart_traject.smart_trajectories.convert import txt_to_csv, txt_to_csv_datetime
 from smart_traject.smart_trajectories.processing import generate_trajectory_collection
 from smart_traject.smart_trajectories.plot import plot_trajectories_with_background, plot_trajectories_one_category_background, plot_trajectories_with_stop_in_rectangle
@@ -166,8 +166,8 @@ def upload_txt_to_csv():
             trajectory_data = {
                 "identifier": traj.id,
                 "category": traj.df['category'].iloc[0],
-                "start_time": traj.get_start_time().isoformat(),
-                "end_time": traj.get_end_time().isoformat(),
+                "start_time": traj.get_start_time(),
+                "end_time": traj.get_end_time(),
                 "geometry": traj.to_linestring().wkt,
                 "background": camera,
                 "points": [
@@ -182,16 +182,20 @@ def upload_txt_to_csv():
         
         # Insere no MongoDB
         if mongo_docs:
-            collection_traj.insert_many(mongo_docs)
+            result = collection_traj.insert_many(mongo_docs)
+            docs_count = len(result.inserted_ids)
         
-        # Cria e retorna o JSON
-        json_filename = os.path.splitext(txt_filename)[0] + '_converted.json'
+        # Cria e salva o JSON
+        json_filename = os.path.splitext(txt_filename)[0] + '_converted_datetime.json'
         json_file_path = os.path.join(OUTPUT_DATA_DIR2, json_filename)
         
         with open(json_file_path, 'w') as f:
-            json.dump(mongo_docs, f, cls=JSONEncoder)
+            json.dump(mongo_docs, f, cls=CustomJSONEncoder)
         
-        return send_file(json_file_path, as_attachment=True)
+        return jsonify({
+            'status': 'success',
+            'message': f'Arquivo processado. {docs_count} trajetórias salvas com sucesso!'
+        }), 200
     
     except Exception as e:
         return jsonify({
@@ -247,13 +251,13 @@ def upload_txt_to_csv_datetime():
             trajectory_data = {
                 "identifier": traj.id,
                 "category": traj.df['category'].iloc[0],
-                "start_time": traj.get_start_time().isoformat(),
-                "end_time": traj.get_end_time().isoformat(),
+                "start_time": traj.get_start_time(),
+                "end_time": traj.get_end_time(),
                 "geometry": traj.to_linestring().wkt,
                 "background": camera,
                 "points": [
                     {
-                        "timestamp": row.name.isoformat(),
+                        "timestamp": row.name,
                         "geometry": row.geometry.wkt   
                     }
                     for _, row in traj.df.iterrows()
@@ -263,20 +267,20 @@ def upload_txt_to_csv_datetime():
         
         # Insere no MongoDB
         if mongo_docs:
-            collection_traj.insert_many(mongo_docs)
+            result = collection_traj.insert_many(mongo_docs)
+            docs_count = len(result.inserted_ids)
         
-        # Cria e retorna o JSON
+        # Cria e salva o JSON
         json_filename = os.path.splitext(txt_filename)[0] + '_converted_datetime.json'
         json_file_path = os.path.join(OUTPUT_DATA_DIR2, json_filename)
         
         with open(json_file_path, 'w') as f:
-            json.dump(mongo_docs, f, cls=JSONEncoder)
+            json.dump(mongo_docs, f, cls=CustomJSONEncoder)
         
-        return send_file(
-            json_file_path,
-            as_attachment=True,
-            download_name=json_filename
-        )
+        return jsonify({
+            'status': 'success',
+            'message': f'Arquivo processado. {docs_count} trajetórias salvas com sucesso!'
+        }), 200
     
     except Exception as e:
         return jsonify({
@@ -324,14 +328,20 @@ def plot_with_background():
         return jsonify({'status': 'error', 'message': 'Valores de tempo inválidos'}), 400
 
     if selectedDate:
-        hours_init = int(startTime)
-        minutes_init = int((startTime - hours_init) * 60)
-        hours_end = int(endTime)
-        minutes_end = int((endTime - hours_end) * 60)
-        query_date_start = f"{selectedDate}T{hours_init:02}:{minutes_init:02}:00"
-        query_date_end = f"{selectedDate}T{hours_end:02}:{minutes_end:02}:00"
-        query["start_time"] = {"$lte": query_date_end}
-        query["end_time"] = {"$gte": query_date_start}
+        try:
+            base_date = datetime.fromisoformat(selectedDate)
+            hours_init = int(startTime)
+            minutes_init = int((startTime - hours_init) * 60)
+            query_date_start = base_date.replace(hour=hours_init, minute=minutes_init, second=0, microsecond=0, tzinfo=timezone.utc)
+            
+            hours_end = int(endTime)
+            minutes_end = int((endTime - hours_end) * 60)
+            query_date_end = base_date.replace(hour=hours_end, minute=minutes_end, second=0, microsecond=0, tzinfo=timezone.utc)
+            
+            query["start_time"] = {"$lte": query_date_end}
+            query["end_time"] = {"$gte": query_date_start}
+        except ValueError:
+            return jsonify({'status': 'error', 'message': f'Formato de data inválido: {selectedDate}'}), 400
         
     if camera:
         query["background"] = camera
@@ -436,14 +446,20 @@ def plot_one_category():
         query["category"] = category
 
     if selectedDate:
-        hours_init = int(startTime)
-        minutes_init = int((startTime - hours_init) * 60)
-        hours_end = int(endTime)
-        minutes_end = int((endTime - hours_end) * 60)
-        query_date_start = f"{selectedDate}T{hours_init:02}:{minutes_init:02}:00"
-        query_date_end = f"{selectedDate}T{hours_end:02}:{minutes_end:02}:00"
-        query["start_time"] = {"$lte": query_date_end}
-        query["end_time"] = {"$gte": query_date_start}
+        try:
+            base_date = datetime.fromisoformat(selectedDate)
+            hours_init = int(startTime)
+            minutes_init = int((startTime - hours_init) * 60)
+            query_date_start = base_date.replace(hour=hours_init, minute=minutes_init, second=0, microsecond=0, tzinfo=timezone.utc)
+            
+            hours_end = int(endTime)
+            minutes_end = int((endTime - hours_end) * 60)
+            query_date_end = base_date.replace(hour=hours_end, minute=minutes_end, second=0, microsecond=0, tzinfo=timezone.utc)
+            
+            query["start_time"] = {"$lte": query_date_end}
+            query["end_time"] = {"$gte": query_date_start}
+        except ValueError:
+            return jsonify({'status': 'error', 'message': f'Formato de data inválido: {selectedDate}'}), 400
         
     if camera:
         query["background"] = camera
@@ -558,14 +574,20 @@ def plot_with_limits():
         query["category"] = category
 
     if selectedDate:
-        hours_init = int(startTime)
-        minutes_init = int((startTime - hours_init) * 60)
-        hours_end = int(endTime)
-        minutes_end = int((endTime - hours_end) * 60)
-        query_date_start = f"{selectedDate}T{hours_init:02}:{minutes_init:02}:00"
-        query_date_end = f"{selectedDate}T{hours_end:02}:{minutes_end:02}:00"
-        query["start_time"] = {"$lte": query_date_end}
-        query["end_time"] = {"$gte": query_date_start}
+        try:
+            base_date = datetime.fromisoformat(selectedDate)
+            hours_init = int(startTime)
+            minutes_init = int((startTime - hours_init) * 60)
+            query_date_start = base_date.replace(hour=hours_init, minute=minutes_init, second=0, microsecond=0, tzinfo=timezone.utc)
+            
+            hours_end = int(endTime)
+            minutes_end = int((endTime - hours_end) * 60)
+            query_date_end = base_date.replace(hour=hours_end, minute=minutes_end, second=0, microsecond=0, tzinfo=timezone.utc)
+            
+            query["start_time"] = {"$lte": query_date_end}
+            query["end_time"] = {"$gte": query_date_start}
+        except ValueError:
+            return jsonify({'status': 'error', 'message': f'Formato de data inválido: {selectedDate}'}), 400
         
     if camera:
         query["background"] = camera
@@ -683,14 +705,20 @@ def plot_with_start_finish():
         query["category"] = category
 
     if selectedDate:
-        hours_init = int(startTime)
-        minutes_init = int((startTime - hours_init) * 60)
-        hours_end = int(endTime)
-        minutes_end = int((endTime - hours_end) * 60)
-        query_date_start = f"{selectedDate}T{hours_init:02}:{minutes_init:02}:00"
-        query_date_end = f"{selectedDate}T{hours_end:02}:{minutes_end:02}:00"
-        query["start_time"] = {"$lte": query_date_end}
-        query["end_time"] = {"$gte": query_date_start}
+        try:
+            base_date = datetime.fromisoformat(selectedDate)
+            hours_init = int(startTime)
+            minutes_init = int((startTime - hours_init) * 60)
+            query_date_start = base_date.replace(hour=hours_init, minute=minutes_init, second=0, microsecond=0, tzinfo=timezone.utc)
+            
+            hours_end = int(endTime)
+            minutes_end = int((endTime - hours_end) * 60)
+            query_date_end = base_date.replace(hour=hours_end, minute=minutes_end, second=0, microsecond=0, tzinfo=timezone.utc)
+            
+            query["start_time"] = {"$lte": query_date_end}
+            query["end_time"] = {"$gte": query_date_start}
+        except ValueError:
+            return jsonify({'status': 'error', 'message': f'Formato de data inválido: {selectedDate}'}), 400
         
     if camera:
         query["background"] = camera
@@ -804,14 +832,20 @@ def plot_with_stopped():
         query["category"] = category
 
     if selectedDate:
-        hours_init = int(startTime)
-        minutes_init = int((startTime - hours_init) * 60)
-        hours_end = int(endTime)
-        minutes_end = int((endTime - hours_end) * 60)
-        query_date_start = f"{selectedDate}T{hours_init:02}:{minutes_init:02}:00"
-        query_date_end = f"{selectedDate}T{hours_end:02}:{minutes_end:02}:00"
-        query["start_time"] = {"$lte": query_date_end}
-        query["end_time"] = {"$gte": query_date_start}
+        try:
+            base_date = datetime.fromisoformat(selectedDate)
+            hours_init = int(startTime)
+            minutes_init = int((startTime - hours_init) * 60)
+            query_date_start = base_date.replace(hour=hours_init, minute=minutes_init, second=0, microsecond=0, tzinfo=timezone.utc)
+            
+            hours_end = int(endTime)
+            minutes_end = int((endTime - hours_end) * 60)
+            query_date_end = base_date.replace(hour=hours_end, minute=minutes_end, second=0, microsecond=0, tzinfo=timezone.utc)
+            
+            query["start_time"] = {"$lte": query_date_end}
+            query["end_time"] = {"$gte": query_date_start}
+        except ValueError:
+            return jsonify({'status': 'error', 'message': f'Formato de data inválido: {selectedDate}'}), 400
         
     if camera:
         query["background"] = camera
@@ -926,14 +960,20 @@ def plot_with_stop_in_rectangle():
         query["category"] = category
 
     if selectedDate:
-        hours_init = int(startTime)
-        minutes_init = int((startTime - hours_init) * 60)
-        hours_end = int(endTime)
-        minutes_end = int((endTime - hours_end) * 60)
-        query_date_start = f"{selectedDate}T{hours_init:02}:{minutes_init:02}:00"
-        query_date_end = f"{selectedDate}T{hours_end:02}:{minutes_end:02}:00"
-        query["start_time"] = {"$lte": query_date_end}
-        query["end_time"] = {"$gte": query_date_start}
+        try:
+            base_date = datetime.fromisoformat(selectedDate)
+            hours_init = int(startTime)
+            minutes_init = int((startTime - hours_init) * 60)
+            query_date_start = base_date.replace(hour=hours_init, minute=minutes_init, second=0, microsecond=0, tzinfo=timezone.utc)
+            
+            hours_end = int(endTime)
+            minutes_end = int((endTime - hours_end) * 60)
+            query_date_end = base_date.replace(hour=hours_end, minute=minutes_end, second=0, microsecond=0, tzinfo=timezone.utc)
+            
+            query["start_time"] = {"$lte": query_date_end}
+            query["end_time"] = {"$gte": query_date_start}
+        except ValueError:
+            return jsonify({'status': 'error', 'message': f'Formato de data inválido: {selectedDate}'}), 400
         
     if camera:
         query["background"] = camera
@@ -1044,14 +1084,20 @@ def plot_in_monitored_area():
         query["category"] = category
 
     if selectedDate:
-        hours_init = int(startTime)
-        minutes_init = int((startTime - hours_init) * 60)
-        hours_end = int(endTime)
-        minutes_end = int((endTime - hours_end) * 60)
-        query_date_start = f"{selectedDate}T{hours_init:02}:{minutes_init:02}:00"
-        query_date_end = f"{selectedDate}T{hours_end:02}:{minutes_end:02}:00"
-        query["start_time"] = {"$lte": query_date_end}
-        query["end_time"] = {"$gte": query_date_start}
+        try:
+            base_date = datetime.fromisoformat(selectedDate)
+            hours_init = int(startTime)
+            minutes_init = int((startTime - hours_init) * 60)
+            query_date_start = base_date.replace(hour=hours_init, minute=minutes_init, second=0, microsecond=0, tzinfo=timezone.utc)
+            
+            hours_end = int(endTime)
+            minutes_end = int((endTime - hours_end) * 60)
+            query_date_end = base_date.replace(hour=hours_end, minute=minutes_end, second=0, microsecond=0, tzinfo=timezone.utc)
+            
+            query["start_time"] = {"$lte": query_date_end}
+            query["end_time"] = {"$gte": query_date_start}
+        except ValueError:
+            return jsonify({'status': 'error', 'message': f'Formato de data inválido: {selectedDate}'}), 400
         
     if camera:
         query["background"] = camera
