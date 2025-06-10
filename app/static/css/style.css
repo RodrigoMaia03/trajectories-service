@@ -151,3 +151,19 @@ h2 {
     margin-top: 1rem;
 }
 
+#message-display-container .alert {
+    opacity: 1;
+    transition: opacity 0.5s ease-out;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#message-display-container .alert.fade-out {
+    opacity: 0;
+}
+
+#message-display-container .alert-icon {
+    margin-right: 10px;
+    font-size: 1.2rem;
+}
