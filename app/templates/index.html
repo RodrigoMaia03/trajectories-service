@@ -66,7 +66,7 @@
             </div>
 
             <!-- Campos Dinâmicos -->
-            <div class="row mb-3 mt-2">
+            <div class="row mb-2">
                 <div class="col-md-4" id="bgCategoryField" style="display:none;">
                     <label class="form-label">Categoria</label>
                     <input type="number" step="1" class="form-control" id="bgCategory" placeholder="Ex: 2">
@@ -137,7 +137,7 @@
                         placeholder="Ex: LINESTRING(0 0, 50 100)">
                 </div>
 
-                <div class="col-md-4" id="bgStartFinishField" style="display:none;">
+                <div class="col-md-4" id="bgFinishField" style="display:none;">
                     <label class="form-label">Linha de Chegada (WKT)</label>
                     <input type="text" step="1" class="form-control" 
                         id="bgFinishLine"
@@ -146,51 +146,61 @@
                 </div>
             </div>
 
-        <!-- Parâmetros Complementares -->
-        <div class="row g-3 mt-2">
-            <!-- Tempo -->
-            <div class="col-md-3">
-                <label class="form-label">Horário Inicial</label>
-                <input type="time" class="form-control" id="bgStartTime" required>
+            <!-- Parâmetros Complementares -->
+            <div class="row g-3 mt-2">
+                <!-- Tempo -->
+                <div class="col-md-3">
+                    <label class="form-label">Horário Inicial</label>
+                    <input type="time" class="form-control" id="bgStartTime" required>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">Horário Final</label>
+                    <input type="time" class="form-control" id="bgEndTime" required>
+                </div>
+
+                <!-- Dimensões -->
+                <div class="col-md-3">
+                    <label class="form-label">Largura (cm)</label>
+                    <input type="number" step="1" class="form-control" id="bgXsize" value="10"
+                    placeholder="Máx: 50">
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">Altura (cm)</label>
+                    <input type="number" step="1" class="form-control" id="bgYsize" value="10"
+                    placeholder="Máx: 50">
+                </div>
+
+                <!-- Limites -->
+                <div class="col-md-3">
+                    <label class="form-label">Latitude Inicial</label>
+                    <input type="number" step="1" class="form-control" id="bgXlim1" value="0">
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">Latitude Final</label>
+                    <input type="number" step="1" class="form-control" id="bgXlim2" value="100">
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">Longitude Inicial</label>
+                    <input type="number" step="1" class="form-control" id="bgYlim1" value="0">
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">Longitude Final</label>
+                    <input type="number" step="1" class="form-control" id="bgYlim2" value="100">
+                </div>
             </div>
 
-            <div class="col-md-3">
-                <label class="form-label">Horário Final</label>
-                <input type="time" class="form-control" id="bgEndTime" required>
-            </div>
-
-            <!-- Dimensões -->
-            <div class="col-md-3">
-                <label class="form-label">Largura (cm)</label>
-                <input type="number" step="1" class="form-control" id="bgXsize" value="10"
-                placeholder="Máx: 50">
-            </div>
-
-            <div class="col-md-3">
-                <label class="form-label">Altura (cm)</label>
-                <input type="number" step="1" class="form-control" id="bgYsize" value="10"
-                placeholder="Máx: 50">
-            </div>
-
-            <!-- Limites -->
-            <div class="col-md-3">
-                <label class="form-label">Latitude Inicial</label>
-                <input type="number" step="1" class="form-control" id="bgXlim1" value="0">
-            </div>
-
-            <div class="col-md-3">
-                <label class="form-label">Latitude Final</label>
-                <input type="number" step="1" class="form-control" id="bgXlim2" value="100">
-            </div>
-
-            <div class="col-md-3">
-                <label class="form-label">Longitude Inicial</label>
-                <input type="number" step="1" class="form-control" id="bgYlim1" value="0">
-            </div>
-
-            <div class="col-md-3">
-                <label class="form-label">Longitude Final</label>
-                <input type="number" step="1" class="form-control" id="bgYlim2" value="100">
+            <!-- Modo de visualização das trajetórias -->
+            <div class="mb-2 mt-4" id="bgRenderModeField">
+                <label class="form-label">Modo de Visualização</label>
+                <select class="form-select" id="bgRenderMode" style="width: 300px; height: 40px">
+                    <option value="all">Todas as Trajetórias</option>
+                    <option value="median">Mediana das Trajetórias</option>
+                </select>
             </div>
 
         <!-- Botão e Preview -->

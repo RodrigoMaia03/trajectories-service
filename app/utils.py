@@ -15,9 +15,9 @@ collection_traj = db[COLLECTION_TRAJ]
 class CustomJSONEncoder(json.JSONEncoder):
     def default(self, o):
         if isinstance(o, datetime):
-            return o.isoformat()  # Converte datetime para string
+            return o.isoformat()
         if isinstance(o, ObjectId):
-            return str(o) # Converte ObjectId para string
+            return str(o)
         return super().default(o)
 
 
@@ -50,6 +50,9 @@ def fetch_trajectory_data_from_mongodb(query={}):
 def create_trajectory_collection_mongodb(query={}):
     # Cria um objeto TrajectoryCollection diretamente do MongoDB.
     df = fetch_trajectory_data_from_mongodb(query)
+    
+    if df.empty:
+        return None
     
     # Cria geometrias Point e prepara GeoDataFrame
     df['geometry'] = df.apply(lambda row: Point(row.x, row.y), axis=1)

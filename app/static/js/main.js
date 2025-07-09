@@ -1,34 +1,53 @@
 // Controles Dinâmicos
 function updateBgPlotControls() {
     const plotType = document.getElementById('plotBackgroundType').value;
+    // Define os IDs dos campos dinâmicos para cada tipo de plot
     const dynamicElements = {
-        '/plot_one_category': ['bgCategoryField'],
-        '/plot_with_limits': ['bgCategoryField', 'bgReferenceLineField'],
-        '/plot_start_finish': ['bgCategoryField', 'bgStartFinishField', 'bgDepartureField'],
+        '/plot_with_background': ['bgRenderModeField'],
+        '/plot_one_category': ['bgRenderModeField', 'bgCategoryField'],
+        '/plot_with_limits': ['bgRenderModeField', 'bgCategoryField', 'bgReferenceLineField'],
+        '/plot_start_finish': ['bgRenderModeField', 'bgCategoryField', 'bgDepartureField', 'bgFinishLine'],
         '/plot_with_stopped': ['bgCategoryField', 'bgStopThresholdField', 'bgMinDurationField', 'bgNoiseToleranceField'],
-        '/plot_with_stop_rec': ['bgCategoryField', 'bgStopThresholdField', 'bgMinDurationField', 'bgNoiseToleranceField',
-                'bgRectMinXField', 'bgRectMaxXField', 'bgRectMinYField', 'bgRectMaxYField'],
-        '/plot_monitored_area': ['bgCategoryField', 'bgRectMinXField', 'bgRectMaxXField', 'bgRectMinYField', 
-                'bgRectMaxYField']
+        '/plot_with_stop_rec': ['bgCategoryField', 'bgStopThresholdField', 'bgMinDurationField', 'bgNoiseToleranceField', 'bgRectMinXField', 'bgRectMaxXField', 'bgRectMinYField', 'bgRectMaxYField'],
+        '/plot_monitored_area': ['bgCategoryField', 'bgRectMinXField', 'bgRectMaxXField', 'bgRectMinYField', 'bgRectMaxYField']
     };
 
-    // Esconde todos os campos
-    Object.values(dynamicElements).flat().forEach(id => {
-        const el = document.getElementById(id);
-        if(el) {
-            el.style.display = 'none';
-            el.querySelector('input').required = false;
+    // Pega a lista de todos os IDs de campos dinâmicos possíveis
+    const allDynamicFieldIDs = Object.values(dynamicElements).flat();
+
+    // Esconde todos os campos dinâmicos e remove o 'required'
+    allDynamicFieldIDs.forEach(id => {
+        const fieldContainer = document.getElementById(id);
+        if (fieldContainer) {
+            fieldContainer.style.display = 'none';
+            // Procura por qualquer elemento de formulário, não apenas 'input'
+            const formElement = fieldContainer.querySelector('input, select');
+            
+            // Verifica se um elemento foi encontrado antes de modificar o 'required'
+            if (formElement) {
+                formElement.required = false;
+            }
         }
     });
 
-    // Exibe campos do tipo selecionado
-    if(dynamicElements[plotType]) {
-        dynamicElements[plotType].forEach(id => {
-            const el = document.getElementById(id);
-            if(el) {
-                el.style.display = 'block';
-                // Aplica required apenas para campos específicos
-                el.querySelector('input').required = id === 'bgCategoryField' ? false : true;
+    // Exibe apenas os campos necessários para o tipo de plot selecionado
+    const fieldsToShow = dynamicElements[plotType];
+    if (fieldsToShow) {
+        fieldsToShow.forEach(id => {
+            const fieldContainer = document.getElementById(id);
+            if (fieldContainer) {
+                fieldContainer.style.display = 'block';
+                const formElement = fieldContainer.querySelector('input, select');
+                if (formElement) {
+                    const isRequired = ![
+                        'bgRenderModeField', 
+                        'bgCategoryField'
+                    ].includes(id);
+
+                    if (formElement.type !== 'select-one') { // <select> não tem 'required' da mesma forma
+                         formElement.required = isRequired;
+                    }
+                }
             }
         });
     }
@@ -132,11 +151,8 @@ function displayMessage(text, type = 'info', duration = 5000) {
     }
 }
 
-/**
- * Função principal que lida com a submissão do formulário, validação e chamada da API com timeout.
- * @param {boolean} isMetricsOnly - Se true, chama a rota de métricas; senão, chama a rota de plot.
- */
 
+// Função principal que lida com a submissão do formulário, validação e chamada da API com timeout.
 async function handleRequest(isMetricsOnly = false) {
     const buttonId = isMetricsOnly ? 'metricsOnlyButton' : 'plotButton';
     const button = document.getElementById(buttonId);
@@ -146,7 +162,7 @@ async function handleRequest(isMetricsOnly = false) {
     const imgElement = document.getElementById('bgPlotImage');
     const metricsContainer = document.getElementById('metricsContainer');
     
-    // ATUALIZA A UI PARA O ESTADO DE CARREGAMENTO
+    // Atualiza UI para estado de carregamento
     button.disabled = true;
     spinner.style.display = 'inline-block';
     buttonText.textContent = isMetricsOnly ? 'Processando...' : 'Processando...';
@@ -161,7 +177,7 @@ async function handleRequest(isMetricsOnly = false) {
     }, 120000); // Timeout de 120 segundos
 
     try {
-        // COLETA E VALIDAÇÃO DOS DADOS DO FORMULÁRIO
+        // Coleta e validação dos dados do formulário
         const formData = new FormData();
         const plotType = document.getElementById('plotBackgroundType').value;
 
@@ -170,7 +186,8 @@ async function handleRequest(isMetricsOnly = false) {
             'bgCamera', 'bgSelectedDate',
             'bgStartTime', 'bgEndTime',
             'bgXsize', 'bgYsize',
-            'bgXlim1', 'bgXlim2', 'bgYlim1', 'bgYlim2'
+            'bgXlim1', 'bgXlim2', 'bgYlim1', 'bgYlim2',
+            //'bgRenderMode' -- removido pois nem todos os tipos de plot necessitam dele
         ];
 
         mainFields.forEach(id => {
@@ -196,9 +213,10 @@ async function handleRequest(isMetricsOnly = false) {
 
         // Campos dinâmicos condicionais
         const conditionalFields = {
-            '/plot_one_category': ['bgCategory'],
-            '/plot_with_limits': ['bgCategory', 'bgReferenceLine'],
-            '/plot_start_finish': ['bgCategory','bgDepartureLine', 'bgFinishLine'],
+            '/plot_with_background': ['bgRenderMode'],
+            '/plot_one_category': ['bgRenderMode', 'bgCategory'],
+            '/plot_with_limits': ['bgRenderMode', 'bgCategory', 'bgReferenceLine'],
+            '/plot_start_finish': ['bgRenderMode', 'bgCategory','bgDepartureLine', 'bgFinishLine'],
             '/plot_with_stopped': ['bgCategory', 'bgStopThreshold', 'bgMinDuration', 'bgNoiseTolerance'],
             '/plot_with_stop_rec': ['bgCategory', 'bgStopThreshold', 'bgMinDuration', 'bgNoiseTolerance',
                 'bgRectMinX', 'bgRectMaxX', 'bgRectMinY', 'bgRectMaxY'],
@@ -285,11 +303,11 @@ async function handleRequest(isMetricsOnly = false) {
                 break;
         }
 
-         // REQUISIÇÃO FETCH COM TIMEOUT
+         // Requisição Fetch
         const response = await fetch(plotType, {
             method: 'POST',
             body: formData,
-            signal: controller.signal // Passa o sinal do AbortController
+            signal: controller.signal
         });
 
         clearTimeout(timeoutId);
@@ -301,7 +319,7 @@ async function handleRequest(isMetricsOnly = false) {
 
         const data = await response.json();
 
-        // PROCESSA A RESPOSTA E ATUALIZA A UI
+        // Processa a resposta e atualiza a UI 
         if (isMetricsOnly) {
             metricsContainer.innerHTML = `<div class="metric-section"><h4>Métricas Analíticas</h4>${buildMetricsHTML(data.metrics.summary)}</div>`;
             metricsContainer.style.display = 'block';
@@ -321,8 +339,7 @@ async function handleRequest(isMetricsOnly = false) {
         displayMessage('Processado com sucesso!', 'success');
 
     } catch (error) {
-        // TRATAMENTO DE ERROS
-        clearTimeout(timeoutId); // Limpa o timeout em caso de erro também
+        clearTimeout(timeoutId);
 
         if (error.name === 'AbortError') {
             displayMessage('A requisição demorou muito para responder. Por favor, tente com um intervalo de tempo menor.', 'error');
@@ -330,7 +347,7 @@ async function handleRequest(isMetricsOnly = false) {
             displayMessage(error.message, 'error');
         }
     } finally {
-        // RESTAURA A UI AO ESTADO INICIAL
+        // Restaura a UI para o estado inicial
         spinner.style.display = 'none';
         buttonText.textContent = originalButtonText;
         button.disabled = false;

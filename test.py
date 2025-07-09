@@ -264,46 +264,42 @@ def _validate_common_plot_params():
 
     return {"query": query, "image_path": image_path, "plot_params": plot_params}
 
-# Função para criar e retornar uma plotagem.
-def _generate_plot_response(plot_function, *p_args, **kw_args):
-    buffer = io.BytesIO()
 
-    result = plot_function(*p_args, **kw_args)
+def _generate_plot_response(plot_function, plot_specific_args):
+    # Função para criar e retornar uma plotagem.
+    buffer = io.BytesIO()
+    
+    # Gerar plotagem
+    result = plot_function(**plot_specific_args)
     
     plt.savefig(buffer, format='png', bbox_inches='tight', dpi=300)
     plt.close()
     buffer.seek(0)
     
-    return jsonify({
-        "status": "success",
-        "image": base64.b64encode(buffer.getvalue()).decode('utf-8'),
-        "metrics": {"summary": result}
-    })
+    return jsonify({"status": "success","image": base64.b64encode(buffer.getvalue()).decode('utf-8'),
+        "metrics": {"summary": result}})
     
 
 @app.route('/plot_with_background', methods=['POST'])
 def plot_with_background():
     common_params = _validate_common_plot_params()
-    render_mode = request.form.get('render_mode', 'all')
         
     traj_collection = create_trajectory_collection_mongodb(common_params['query'])
     if not traj_collection:
         raise ApiException('Nenhuma trajetória encontrada para o período', status_code=404)
 
-    return _generate_plot_response(
-        plot_trajectories_with_background,
-        traj_collection,
-        common_params['image_path'],
-        render_mode=render_mode,
+    plot_args = {
+        "traj_collection": traj_collection,
+        "image_path": common_params['image_path'],
         **common_params['plot_params']
-    )
+    }
+    return _generate_plot_response(plot_trajectories_with_background, plot_args)
 
 
 @app.route('/plot_one_category', methods=['POST'])
 def plot_category():
     common_params = _validate_common_plot_params()
     category = request.form.get('category', type=int)
-    render_mode = request.form.get('render_mode', 'all')
 
     if category is None:
         raise ApiException("Parâmetro de categoria é obrigatório e deve ser um número", status_code=400)
@@ -313,14 +309,14 @@ def plot_category():
     if not traj_collection:
         raise ApiException("Nenhuma trajetória encontrada", status_code=404)
 
-    return _generate_plot_response(
-        plot_trajectories_one_category_background,
-        traj_collection,
-        category,
-        common_params['image_path'],
-        render_mode=render_mode,
+    plot_args = {
+        "traj_collection": traj_collection,
+        "category": category,
+        "image_path": common_params['image_path'],
         **common_params['plot_params']
-    )
+    }
+    
+    return _generate_plot_response(plot_trajectories_one_category_background, plot_args)
 
 
 @app.route('/plot_with_limits', methods=['POST'])
@@ -328,7 +324,6 @@ def plot_limits():
     common_params = _validate_common_plot_params()
     category = request.form.get('category', type=int)
     reference_line_wkt = request.form.get('reference_line')
-    render_mode = request.form.get('render_mode', 'all')
     
     if category is None or not reference_line_wkt:
         raise ApiException("Parâmetros de categoria e linha de referência são obrigatórios", 
@@ -345,15 +340,15 @@ def plot_limits():
     if not traj_collection:
         raise ApiException('Nenhuma trajetória encontrada para os filtros aplicados', status_code=404)
 
-    return _generate_plot_response(
-        plot_trajectories_with_limits,
-        traj_collection,
-        category,
-        common_params['image_path'],
-        reference_line,
-        render_mode=render_mode,
+    plot_args = {
+        "traj_collection": traj_collection,
+        "category": category,
+        "image_path": common_params['image_path'],
+        "reference_line": reference_line,
         **common_params['plot_params']
-    )
+    }
+    
+    return _generate_plot_response(plot_trajectories_with_limits, plot_args)
 
 
 @app.route('/plot_start_finish', methods=['POST'])
@@ -362,7 +357,6 @@ def plot_start_finish():
     category = request.form.get('category', type=int)
     finish_line_wkt = request.form.get('finish_line')
     departure_line_wkt = request.form.get('departure_line')
-    render_mode = request.form.get('render_mode', 'all')
     
     if category is None or not finish_line_wkt or not departure_line_wkt:
         raise ApiException("Parâmetros de categoria e linhas partida/chegada são obrigatórios", 
@@ -380,22 +374,21 @@ def plot_start_finish():
     if not traj_collection:
         raise ApiException('Nenhuma trajetória encontrada para os filtros aplicados', status_code=404)
 
-    return _generate_plot_response(
-        plot_trajectories_with_start_finish,
-        traj_collection,
-        category,
-        common_params['image_path'],
-        arrival_line,
-        departure_line,
-        render_mode=render_mode,
+    plot_args = {
+        "traj_collection": traj_collection,
+        "category": category,
+        "image_path": common_params['image_path'],
+        "arrival_line": arrival_line,
+        "departure_line": departure_line,
         **common_params['plot_params']
-    )
+    }
+    
+    return _generate_plot_response(plot_trajectories_with_start_finish, plot_args)
 
 
 @app.route('/plot_with_stopped', methods=['POST'])
 def plot_with_stopped():
     common_params = _validate_common_plot_params()
-    render_mode = request.form.get('render_mode', 'all')
 
     try:
         category = int(request.form['category'])
@@ -413,23 +406,22 @@ def plot_with_stopped():
     if not traj_collection:
         raise ApiException('Nenhuma trajetória encontrada para os filtros aplicados', status_code=404)
 
-    return _generate_plot_response(
-        plot_trajectories_with_stopped,
-        traj_collection,
-        category,
-        common_params['image_path'],
-        render_mode=render_mode,
-        stop_threshold=stop_threshold,
-        min_duration=min_duration,
-        noise_tolerance=noise_tolerance,
+    plot_args = {
+        "traj_collection": traj_collection,
+        "category": category,
+        "image_path": common_params['image_path'],
+        "stop_threshold": stop_threshold,
+        "min_duration": min_duration,
+        "noise_tolerance": noise_tolerance,
         **common_params['plot_params']
-    )
+    }
+
+    return _generate_plot_response(plot_trajectories_with_stopped, plot_args)
 
 
 @app.route('/plot_with_stop_rec', methods=['POST'])
 def plot_with_stop_in_rectangle():
     common_params = _validate_common_plot_params()
-    render_mode = request.form.get('render_mode', 'all')
 
     try:
         category = int(request.form['category'])
@@ -455,23 +447,22 @@ def plot_with_stop_in_rectangle():
     if not traj_collection:
         raise ApiException('Nenhuma trajetória encontrada para os filtros aplicados', status_code=404)
 
-    return _generate_plot_response(
-        plot_trajectories_with_stop_in_rectangle,
-        traj_collection,
-        category,
-        common_params['image_path'],
-        render_mode=render_mode,
-        stop_threshold=stop_threshold,
-        min_duration=min_duration,
-        noise_tolerance=noise_tolerance,
+    plot_args = {
+        "traj_collection": traj_collection,
+        "category": category,
+        "image_path": common_params['image_path'],
+        "stop_threshold": stop_threshold,
+        "min_duration": min_duration,
+        "noise_tolerance": noise_tolerance,
         **common_params['plot_params']
-    )
+    }
+    
+    return _generate_plot_response(plot_trajectories_with_stop_in_rectangle, plot_args)
 
 
 @app.route('/plot_monitored_area', methods=['POST'])
 def plot_monitored_area():
     common_params = _validate_common_plot_params()
-    render_mode = request.form.get('render_mode', 'all')
 
     try:
         category = int(request.form['category'])
@@ -494,21 +485,15 @@ def plot_monitored_area():
     if not traj_collection:
         raise ApiException('Nenhuma trajetória encontrada para os filtros aplicados', status_code=404)
 
-    return _generate_plot_response(
-        plot_trajectories_in_monitored_area,
-        traj_collection,
-        category,
-        common_params['image_path'],
-        render_mode=render_mode,
+    plot_args = {
+        "traj_collection": traj_collection,
+        "category": category,
+        "image_path": common_params['image_path'],
         **common_params['plot_params']
-    )
+    }
 
-'''
-# Endpoint para receber e processar arquivos de trajetórias enviados pelo software de automação
-@app.route('/send_trajectory_archive', methods=['POST'])
-def send_trajectory_archive():
-    return upload_txt_to_csv()
-'''
+    return _generate_plot_response(plot_trajectories_in_monitored_area, plot_args)
+
 
 if __name__ == "__main__":
     app.run(debug=True)

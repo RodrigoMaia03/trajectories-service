@@ -14,13 +14,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // Envio do formulário
     form.addEventListener('submit', handleFormSubmit);
 
+    // Handlers para seleção de arquivo
     function handleFileSelect(e) {
         const file = e.target.files[0];
         if (file && validateFile(file)) { 
             showPreview(file);
         }
     }
-    
+
+    // Handlers para Drag and Drop
     function handleFileDrop(e) {
         e.preventDefault();
         const file = e.dataTransfer.files[0];
@@ -36,6 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
         dropZone.classList.add('drag-over');
     }
     
+    // Validação do arquivo
     function validateFile(file) {
         const validTypes = ['image/jpeg', 'image/png'];
         const maxSize = 5 * 1024 * 1024;
@@ -58,6 +61,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return true;
     }
 
+    // Pré-visualização do arquivo anexado
     function showPreview(file) {
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -66,6 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
         reader.readAsDataURL(file);
     }
 
+    // Validação do formulário e envio do formdata
     async function handleFormSubmit(e) {
         e.preventDefault();
 
@@ -82,7 +87,6 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('image', file);
 
         try {
-            // Exemplo de envio para o Flask
             const response = await fetch('/register_camera', {
                 method: 'POST',
                 body: formData
